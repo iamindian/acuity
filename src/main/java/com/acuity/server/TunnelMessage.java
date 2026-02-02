@@ -1,4 +1,4 @@
-package com.tunnel.server;
+package com.acuity.server;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;

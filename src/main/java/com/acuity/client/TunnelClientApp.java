@@ -1,4 +1,4 @@
-package com.tunnel.client;
+package com.acuity.client;
 
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.ChannelFuture;

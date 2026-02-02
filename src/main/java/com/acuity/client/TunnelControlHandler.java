@@ -1,6 +1,6 @@
-package com.tunnel.client;
+package com.acuity.client;
 
-import com.tunnel.server.TunnelMessage;
+import com.acuity.server.TunnelMessage;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;

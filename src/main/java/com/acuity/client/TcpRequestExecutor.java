@@ -1,4 +1,4 @@
-package com.tunnel.client;
+package com.acuity.client;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
