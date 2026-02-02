@@ -1,5 +1,6 @@
 package com.acuity.client;
 
+import com.acuity.common.SslContextFactory;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
@@ -8,6 +9,8 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.IdleStateHandler;
 import java.util.concurrent.TimeUnit;
 
@@ -29,12 +32,18 @@ public class TunnelClientApp {
     public void start() throws InterruptedException {
         EventLoopGroup group = new NioEventLoopGroup();
         try {
+            final SslContext sslContext = SslContextFactory.getClientContext();
+
             Bootstrap bootstrap = new Bootstrap();
             bootstrap.group(group)
                 .channel(NioSocketChannel.class)
                 .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
-                    protected void initChannel(SocketChannel ch) {
+                    protected void initChannel(SocketChannel ch) throws Exception {
+                        // Add SSL handler first in the pipeline
+                        SslHandler sslHandler = sslContext.newHandler(ch.alloc(), tunnelHost, tunnelPort);
+                        ch.pipeline().addLast(sslHandler);
+
                         ch.pipeline().addLast(new IdleStateHandler(60, 60, 0, TimeUnit.SECONDS));
                         ch.pipeline().addLast(new TunnelControlHandler(TunnelClientApp.this));
                     }
@@ -44,6 +53,8 @@ public class TunnelClientApp {
 
             ChannelFuture future = bootstrap.connect(tunnelHost, tunnelPort).sync();
             future.channel().closeFuture().sync();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to start tunnel client", e);
         } finally {
             group.shutdownGracefully();
         }
