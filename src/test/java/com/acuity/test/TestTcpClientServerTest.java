@@ -27,10 +27,13 @@ public class TestTcpClientServerTest {
     private static final String TUNNEL_HOST = "127.0.0.1";
     private static final long STARTUP_DELAY_MS = 2000;
 
+    // Shared encryption key (password) - Base64 encoded AES-256 key (32 bytes)
+    // This is a valid 256-bit key: "MySecretKeyForAESEncryption1234" (32 bytes)
+    private static final String SHARED_KEY_PASSWORD = "TXlTZWNyZXRLZXlGb3JBRVNFbmNyeXB0aW9uMTIzNA==";
+
     private static Thread tunnelServerThread;
     private static Thread tunnelClientThread;
     private static Thread testTcpServerThread;
-    private static String sharedKey;
 
     @BeforeClass
     public static void setUpBeforeClass() throws Exception {
@@ -78,49 +81,40 @@ public class TestTcpClientServerTest {
         tunnelServerThread = new Thread(() -> {
             try {
                 System.out.println("[TunnelServer] Starting on port " + TUNNEL_SERVER_PORT);
-                TunnelServerApp server = new TunnelServerApp(TUNNEL_SERVER_PORT, TunnelServerApp.ClientType.SERVER);
+                System.out.println("[TunnelServer] Using shared key password");
+
+                TunnelServerApp server = new TunnelServerApp(TUNNEL_SERVER_PORT, TunnelServerApp.ClientType.SERVER, SHARED_KEY_PASSWORD);
                 server.start();
             } catch (InterruptedException e) {
                 System.out.println("[TunnelServer] Interrupted");
                 Thread.currentThread().interrupt();
+            } catch (Exception e) {
+                System.err.println("[TunnelServer] Error: " + e.getMessage());
+                e.printStackTrace();
             }
         });
         tunnelServerThread.setDaemon(true);
         tunnelServerThread.start();
 
-        // Wait for server to generate key and print it
+        // Wait for server to start
         Thread.sleep(1500);
     }
 
     private static void startTunnelClient() throws Exception {
-        // For testing, we'll generate a key once at the start
-        if (sharedKey == null) {
-            try {
-                // Generate a key by starting and immediately stopping a server
-                SymmetricEncryption.getOrGenerateKey();
-                sharedKey = SymmetricEncryption.getKeyAsString();
-                System.out.println("[Test] Generated shared key: " + sharedKey.substring(0, 20) + "...");
-            } catch (Exception e) {
-                throw new RuntimeException("Failed to generate encryption key", e);
-            }
-        }
-
-        final String keyForClient = sharedKey;
         tunnelClientThread = new Thread(() -> {
             try {
                 System.out.println("[TunnelClient] Starting - connecting to " + TUNNEL_HOST + ":" + TUNNEL_SERVER_PORT);
                 System.out.println("[TunnelClient] Proxy port: " + TUNNEL_CLIENT_PROXY_PORT);
                 System.out.println("[TunnelClient] Target: " + TUNNEL_HOST + ":" + TEST_TCP_SERVER_PORT);
-
-                // Set the shared key before creating the client
-                SymmetricEncryption.setSecretKeyFromBase64(keyForClient);
+                System.out.println("[TunnelClient] Using shared key password");
 
                 TunnelClientApp client = new TunnelClientApp(
                     TUNNEL_HOST,
                     TUNNEL_SERVER_PORT,
                     TUNNEL_CLIENT_PROXY_PORT,
                     TUNNEL_HOST,
-                    TEST_TCP_SERVER_PORT
+                    TEST_TCP_SERVER_PORT,
+                    SHARED_KEY_PASSWORD
                 );
                 client.start();
             } catch (InterruptedException e) {

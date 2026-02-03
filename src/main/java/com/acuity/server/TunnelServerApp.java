@@ -34,10 +34,16 @@ public class TunnelServerApp {
 
     private final int port;
     private final ClientType clientType;
+    private final String sharedKey;
 
     public TunnelServerApp(int port, ClientType clientType) {
+        this(port, clientType, null);
+    }
+
+    public TunnelServerApp(int port, ClientType clientType, String sharedKey) {
         this.port = port;
         this.clientType = clientType;
+        this.sharedKey = sharedKey;
         if (clientType == ClientType.PROXY) {
             proxyClientInstances.computeIfAbsent(port, k -> new ArrayList<>()).add(this);
         } else if (clientType == ClientType.BROWSER) {
@@ -86,7 +92,13 @@ public class TunnelServerApp {
 
         try {
             // Initialize symmetric encryption key
-            SymmetricEncryption.getOrGenerateKey();
+            if (sharedKey != null && !sharedKey.isEmpty()) {
+                SymmetricEncryption.setSecretKeyFromBase64(sharedKey);
+                System.out.println("Using provided shared encryption key");
+            } else {
+                SymmetricEncryption.getOrGenerateKey();
+                System.out.println("Generated encryption key: " + SymmetricEncryption.getKeyAsString());
+            }
 
             ServerBootstrap bootstrap = new ServerBootstrap();
             bootstrap.group(bossGroup, workerGroup)

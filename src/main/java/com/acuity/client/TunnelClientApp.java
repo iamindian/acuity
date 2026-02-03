@@ -20,18 +20,33 @@ public class TunnelClientApp {
     final int proxyPort;
     final String targetHost;
     final int targetPort;
+    final String sharedKey;
 
     public TunnelClientApp(String tunnelHost, int tunnelPort, int proxyPort, String targetHost, int targetPort) {
+        this(tunnelHost, tunnelPort, proxyPort, targetHost, targetPort, null);
+    }
+
+    public TunnelClientApp(String tunnelHost, int tunnelPort, int proxyPort, String targetHost, int targetPort, String sharedKey) {
         this.tunnelHost = tunnelHost;
         this.tunnelPort = tunnelPort;
         this.proxyPort = proxyPort;
         this.targetHost = targetHost;
         this.targetPort = targetPort;
+        this.sharedKey = sharedKey;
     }
 
     public void start() throws InterruptedException {
         EventLoopGroup group = new NioEventLoopGroup();
         try {
+            // Initialize symmetric encryption key
+            if (sharedKey != null && !sharedKey.isEmpty()) {
+                SymmetricEncryption.setSecretKeyFromBase64(sharedKey);
+                System.out.println("Using provided shared encryption key");
+            } else {
+                SymmetricEncryption.getOrGenerateKey();
+                System.out.println("Warning: Generated new encryption key - must match server's key!");
+            }
+
             Bootstrap bootstrap = new Bootstrap();
             bootstrap.group(group)
                 .channel(NioSocketChannel.class)
@@ -94,14 +109,6 @@ public class TunnelClientApp {
             System.exit(1);
         }
 
-        try {
-            // Set the shared key from command line argument (Base64-encoded)
-            SymmetricEncryption.setSecretKeyFromBase64(sharedKey);
-            System.out.println("Using provided shared encryption key");
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to initialize encryption key", e);
-        }
-
-        new TunnelClientApp(tunnelHost, tunnelPort, proxyPort, targetHost, targetPort).start();
+        new TunnelClientApp(tunnelHost, tunnelPort, proxyPort, targetHost, targetPort, sharedKey).start();
     }
 }
