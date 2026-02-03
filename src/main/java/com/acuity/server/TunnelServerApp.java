@@ -128,9 +128,29 @@ public class TunnelServerApp {
 
     public static void main(String[] args) throws InterruptedException {
         int tunnelServerPort = 7000;
+        String sharedKey = null;
+
         if (args.length > 0) {
             tunnelServerPort = Integer.parseInt(args[0]);
         }
+        if (args.length > 1) {
+            sharedKey = args[1];
+        }
+
+        try {
+            if (sharedKey != null && !sharedKey.isEmpty()) {
+                // Set the shared key from command line argument
+                SymmetricEncryption.setSecretKey(java.util.Base64.getDecoder().decode(sharedKey));
+                System.out.println("Using provided shared encryption key");
+            } else {
+                // Generate a new key and print it for sharing with clients
+                SymmetricEncryption.getOrGenerateKey();
+                System.out.println("Generated encryption key: " + SymmetricEncryption.getKeyAsString());
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to initialize encryption key", e);
+        }
+
         new TunnelServerApp(tunnelServerPort, ClientType.SERVER).start();
     }
 }

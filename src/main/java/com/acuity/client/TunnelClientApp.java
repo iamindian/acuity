@@ -69,6 +69,7 @@ public class TunnelClientApp {
         int proxyPort = 8080;
         String targetHost = "127.0.0.1";
         int targetPort = 80;
+        String sharedKey = null;
 
         if (args.length > 0) {
             tunnelHost = args[0];
@@ -84,6 +85,23 @@ public class TunnelClientApp {
         }
         if (args.length > 4) {
             targetPort = Integer.parseInt(args[4]);
+        }
+        if (args.length > 5) {
+            sharedKey = args[5];
+        }
+
+        try {
+            if (sharedKey != null && !sharedKey.isEmpty()) {
+                // Set the shared key from command line argument
+                SymmetricEncryption.setSecretKey(java.util.Base64.getDecoder().decode(sharedKey));
+                System.out.println("Using provided shared encryption key");
+            } else {
+                // Generate a new key (should match server's key in production)
+                SymmetricEncryption.getOrGenerateKey();
+                System.out.println("Warning: Generated new encryption key - must match server's key!");
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to initialize encryption key", e);
         }
 
         new TunnelClientApp(tunnelHost, tunnelPort, proxyPort, targetHost, targetPort).start();
