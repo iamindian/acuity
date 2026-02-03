@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit;
  */
 public class TunnelServerApp {
     public enum ClientType {
-        NONE,
+        SERVER,
         PROXY,
         BROWSER
     }
@@ -131,6 +131,6 @@ public class TunnelServerApp {
         if (args.length > 0) {
             tunnelServerPort = Integer.parseInt(args[0]);
         }
-        new TunnelServerApp(tunnelServerPort, ClientType.NONE).start();
+        new TunnelServerApp(tunnelServerPort, ClientType.SERVER).start();
     }
 }
