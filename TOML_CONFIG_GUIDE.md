@@ -1,0 +1,260 @@
+# TOML Configuration Guide for Acuity
+
+## Overview
+
+Acuity Tunnel Server and Client can now be configured using TOML configuration files. This provides a cleaner, more maintainable way to manage configuration compared to command-line arguments.
+
+## Server Configuration (server-config.toml)
+
+### Basic Usage
+
+```powershell
+java -cp target\tunnel-1.0-SNAPSHOT.jar com.acuity.server.TunnelServerApp server-config.toml
+```
+
+### Configuration Options
+
+```toml
+[server]
+# Port for the tunnel server to listen on
+port = 7000
+
+# Shared encryption key (Base64-encoded AES-256 key)
+# If not provided, the server will generate one automatically
+# sharedKey = "your-base64-encoded-key-here"
+
+# Netty boss group size (number of threads for accepting connections)
+# Default is 1 for most cases
+bossGroupSize = 1
+
+# Netty worker group size (number of threads for handling connections)
+# Default is 0, which means number of CPUs * 2
+workerGroupSize = 0
+
+# Idle timeout in seconds (0 = no timeout)
+idleTimeoutSeconds = 60
+
+# Socket options
+soBacklog = 128
+soKeepalive = true
+tcpNodelay = true
+```
+
+### Configuration Details
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `port` | Integer | 7000 | Port for the server to listen on |
+| `sharedKey` | String | null | Base64-encoded AES-256 encryption key (auto-generated if null) |
+| `bossGroupSize` | Integer | 1 | Number of boss threads for accepting connections |
+| `workerGroupSize` | Integer | 0 | Number of worker threads (0 = CPUs × 2) |
+| `idleTimeoutSeconds` | Long | 60 | Idle timeout in seconds |
+| `soBacklog` | Integer | 128 | Server socket backlog |
+| `soKeepalive` | Boolean | true | Enable TCP keep-alive |
+| `tcpNodelay` | Boolean | true | Disable Nagle's algorithm |
+
+## Client Configuration (client-config.toml)
+
+### Basic Usage
+
+```powershell
+java -cp target\tunnel-1.0-SNAPSHOT.jar com.acuity.client.TunnelClientApp client-config.toml
+```
+
+### Configuration Options
+
+```toml
+[client]
+# Tunnel server connection details
+tunnelHost = "127.0.0.1"
+tunnelPort = 7000
+
+# Port that the proxy client will listen on
+proxyPort = 8080
+
+# Target host and port to forward requests to
+targetHost = "127.0.0.1"
+targetPort = 80
+
+# Shared encryption key (must match server's key)
+# Base64-encoded AES-256 key
+# sharedKey = "your-base64-encoded-key-here"
+
+[threadPool]
+# Thread pool configuration for handling TCP requests asynchronously
+corePoolSize = 10
+maxPoolSize = 50
+keepAliveTimeSeconds = 60
+queueCapacity = 200
+
+[netty]
+# Netty configuration
+idleTimeoutSeconds = 60
+soKeepalive = true
+tcpNodelay = true
+```
+
+### Client Configuration Details
+
+#### `[client]` Section
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `tunnelHost` | String | 127.0.0.1 | Tunnel server hostname/IP |
+| `tunnelPort` | Integer | 7000 | Tunnel server port |
+| `proxyPort` | Integer | 8080 | Proxy port requested from server |
+| `targetHost` | String | 127.0.0.1 | Target service hostname/IP |
+| `targetPort` | Integer | 80 | Target service port |
+| `sharedKey` | String | null | Base64-encoded AES-256 encryption key (required) |
+
+#### `[threadPool]` Section
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `corePoolSize` | Integer | 10 | Core number of threads |
+| `maxPoolSize` | Integer | 50 | Maximum number of threads |
+| `keepAliveTimeSeconds` | Long | 60 | Thread keep-alive time in seconds |
+| `queueCapacity` | Integer | 200 | Task queue capacity |
+
+#### `[netty]` Section
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `idleTimeoutSeconds` | Long | 60 | Idle timeout in seconds |
+| `soKeepalive` | Boolean | true | Enable TCP keep-alive |
+| `tcpNodelay` | Boolean | true | Disable Nagle's algorithm |
+
+## Examples
+
+### Example 1: Production Server Setup
+
+**server-config.toml:**
+```toml
+[server]
+port = 7000
+sharedKey = "Hu5SNsC4RUrRO06vtNWkRwVDeR2phas3Pih7D+uJ/V4="
+bossGroupSize = 2
+workerGroupSize = 8
+idleTimeoutSeconds = 120
+soBacklog = 512
+soKeepalive = true
+tcpNodelay = true
+```
+
+### Example 2: Client Forwarding to Remote Service
+
+**client-config.toml:**
+```toml
+[client]
+tunnelHost = "tunnel.example.com"
+tunnelPort = 7000
+proxyPort = 8080
+targetHost = "backend.internal"
+targetPort = 8081
+sharedKey = "Hu5SNsC4RUrRO06vtNWkRwVDeR2phas3Pih7D+uJ/V4="
+
+[threadPool]
+corePoolSize = 20
+maxPoolSize = 100
+keepAliveTimeSeconds = 120
+queueCapacity = 500
+
+[netty]
+idleTimeoutSeconds = 120
+soKeepalive = true
+tcpNodelay = true
+```
+
+### Example 3: Development Setup
+
+**server-config.toml:**
+```toml
+[server]
+port = 7000
+# Auto-generate key
+bossGroupSize = 1
+workerGroupSize = 0
+idleTimeoutSeconds = 60
+```
+
+**client-config.toml:**
+```toml
+[client]
+tunnelHost = "localhost"
+tunnelPort = 7000
+proxyPort = 8080
+targetHost = "localhost"
+targetPort = 9001
+# Key will be generated by server, copy it here
+
+[threadPool]
+corePoolSize = 10
+maxPoolSize = 50
+keepAliveTimeSeconds = 60
+queueCapacity = 200
+```
+
+## Migration from Command-Line Arguments
+
+### Old Way (Command Line)
+```powershell
+java -cp target\tunnel-1.0-SNAPSHOT.jar com.acuity.server.TunnelServerApp 7000 "Hu5SNsC4RUrRO06vtNWkRwVDeR2phas3Pih7D+uJ/V4="
+```
+
+### New Way (TOML)
+```powershell
+java -cp target\tunnel-1.0-SNAPSHOT.jar com.acuity.server.TunnelServerApp server-config.toml
+```
+
+Both methods are still supported for backward compatibility.
+
+## Best Practices
+
+1. **Use TOML for Production**: Configuration files are cleaner and easier to maintain than command-line arguments.
+
+2. **Security**: 
+   - Don't commit encryption keys to version control
+   - Use environment variables or secrets managers for sensitive data
+   - Set proper file permissions on config files (chmod 600)
+
+3. **Development vs Production**:
+   - Create separate config files for dev, test, and production
+   - Use a naming convention: `server-config-dev.toml`, `server-config-prod.toml`
+
+4. **Documentation**:
+   - Keep comments in TOML files explaining non-obvious settings
+   - Document why specific values were chosen
+
+5. **Validation**:
+   - Start the application with a new config to verify it works
+   - Check the console output to confirm loaded settings
+
+## Troubleshooting
+
+### Config File Not Found
+```
+[TunnelServer] Failed to load configuration file: server-config.toml (The system cannot find the file specified)
+```
+**Solution**: Ensure the TOML file is in the current working directory or provide the full path.
+
+### Invalid Configuration
+```
+[TunnelClient] Failed to load configuration file: Invalid TOML
+```
+**Solution**: Check your TOML syntax. Use an online TOML validator if unsure.
+
+### Missing Required Settings
+If required settings are missing, the application uses default values. Check the output to verify this is intentional.
+
+```
+[TunnelClient] ClientConfig{...}
+```
+
+## Switching Between Modes
+
+The application automatically detects whether you're using TOML or command-line mode:
+
+- **If argument ends with `.toml`** → Load as TOML file
+- **Otherwise** → Parse as command-line arguments
+
+This allows you to easily switch between modes without code changes.
