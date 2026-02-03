@@ -58,20 +58,32 @@ public class TestTcpClientServerTest {
     public static void tearDownAfterClass() throws Exception {
         System.out.println("=== Shutting down infrastructure ===");
 
-        // Interrupt all threads
-        if (testTcpServerThread != null) {
+        // Interrupt all threads gracefully
+        if (testTcpServerThread != null && testTcpServerThread.isAlive()) {
             testTcpServerThread.interrupt();
-            testTcpServerThread.join(5000);
+            try {
+                testTcpServerThread.join(3000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
 
-        if (tunnelClientThread != null) {
+        if (tunnelClientThread != null && tunnelClientThread.isAlive()) {
             tunnelClientThread.interrupt();
-            tunnelClientThread.join(5000);
+            try {
+                tunnelClientThread.join(3000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
 
-        if (tunnelServerThread != null) {
+        if (tunnelServerThread != null && tunnelServerThread.isAlive()) {
             tunnelServerThread.interrupt();
-            tunnelServerThread.join(5000);
+            try {
+                tunnelServerThread.join(3000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
 
         System.out.println("=== All servers shut down ===\n");
