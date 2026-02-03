@@ -1,0 +1,30 @@
+# Acuity Tunnel Client Configuration
+
+[client]
+# Tunnel server connection details
+tunnelHost = "127.0.0.1"
+tunnelPort = 7000
+
+# Port that the proxy client will listen on
+proxyPort = 8080
+
+# Target host and port to forward requests to
+targetHost = "127.0.0.1"
+targetPort = 80
+
+# Shared encryption key (must match server's key)
+# Base64-encoded AES-256 key
+# sharedKey = "your-base64-encoded-key-here"
+
+[threadPool]
+# Thread pool configuration for handling TCP requests asynchronously
+corePoolSize = 10
+maxPoolSize = 50
+keepAliveTimeSeconds = 60
+queueCapacity = 200
+
+[netty]
+# Netty configuration
+idleTimeoutSeconds = 60
+soKeepalive = true
+tcpNodelay = true

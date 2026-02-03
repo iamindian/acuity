@@ -1,0 +1,25 @@
+# Acuity Tunnel Server Configuration
+
+[server]
+# Port for the tunnel server to listen on
+port = 7000
+
+# Shared encryption key (Base64-encoded AES-256 key)
+# If not provided, the server will generate one automatically
+# sharedKey = "your-base64-encoded-key-here"
+
+# Netty boss group size (number of threads for accepting connections)
+# Default is 1 for most cases
+bossGroupSize = 1
+
+# Netty worker group size (number of threads for handling connections)
+# Default is 0, which means number of CPUs * 2
+workerGroupSize = 0
+
+# Idle timeout in seconds (0 = no timeout)
+idleTimeoutSeconds = 60
+
+# Socket options
+soBacklog = 128
+soKeepalive = true
+tcpNodelay = true

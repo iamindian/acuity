@@ -27,6 +27,13 @@
             <version>4.1.104.Final</version>
         </dependency>
 
+        <!-- TOML4J for TOML configuration parsing -->
+        <dependency>
+            <groupId>com.moandjiezana.toml</groupId>
+            <artifactId>toml4j</artifactId>
+            <version>0.7.2</version>
+        </dependency>
+
         <!-- JUnit for testing -->
         <dependency>
             <groupId>junit</groupId>
