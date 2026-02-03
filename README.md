@@ -1,4 +1,4 @@
-# Tunnel
+# Acuity
 
 ## Overview
 This project includes a Netty-based tunnel server and a proxy client with symmetric encryption (AES-256). The proxy client connects to the tunnel server, requests a proxy port, and then handles forwarded browser traffic by making HTTP requests and returning responses. All communication between client and server is encrypted using AES-256 symmetric encryption.
@@ -42,13 +42,33 @@ java -cp target\tunnel-1.0-SNAPSHOT.jar com.acuity.server.TunnelServerApp 7000 <
 java -cp target\tunnel-1.0-SNAPSHOT.jar com.acuity.client.TunnelClientApp 127.0.0.1 7000 8080 127.0.0.1 80 <BASE64_KEY>
 ```
 
+### Option 3: Use TOML Configuration Files (Recommended)
+
+Edit the provided configuration files and use them to start the server and client:
+
+**Start the tunnel server with TOML config:**
+
+```powershell
+java -cp target\tunnel-1.0-SNAPSHOT.jar com.acuity.server.TunnelServerApp server-config.toml
+```
+
+**Start the proxy client with TOML config:**
+
+```powershell
+java -cp target\tunnel-1.0-SNAPSHOT.jar com.acuity.client.TunnelClientApp client-config.toml
+```
+
+See `server-config.toml` and `client-config.toml` in the project root for configuration examples.
+
 ### Arguments
 
-**Server**: `java -cp target\tunnel-1.0-SNAPSHOT.jar com.acuity.server.TunnelServerApp [port] [sharedKey]`
+**Server (Command Line Mode)**: `java -cp target\tunnel-1.0-SNAPSHOT.jar com.acuity.server.TunnelServerApp [port] [sharedKey]`
 - `port` (optional): Server port (default: 7000)
 - `sharedKey` (optional): Base64-encoded AES-256 key (if not provided, one will be generated)
 
-**Client**: `java -cp target\tunnel-1.0-SNAPSHOT.jar com.acuity.client.TunnelClientApp [tunnelHost] [tunnelPort] [proxyPort] [targetHost] [targetPort] [sharedKey]`
+**Server (TOML Mode)**: `java -cp target\tunnel-1.0-SNAPSHOT.jar com.acuity.server.TunnelServerApp <config-file.toml>`
+
+**Client (Command Line Mode)**: `java -cp target\tunnel-1.0-SNAPSHOT.jar com.acuity.client.TunnelClientApp [tunnelHost] [tunnelPort] [proxyPort] [targetHost] [targetPort] [sharedKey]`
 - `tunnelHost` (optional): Tunnel server host (default: 127.0.0.1)
 - `tunnelPort` (optional): Tunnel server port (default: 7000)
 - `proxyPort` (optional): Port to request from server (default: 8080)
@@ -56,10 +76,11 @@ java -cp target\tunnel-1.0-SNAPSHOT.jar com.acuity.client.TunnelClientApp 127.0.
 - `targetPort` (optional): Target port for proxying (default: 80)
 - `sharedKey` (optional): Base64-encoded AES-256 key (must match server's key)
 
-3. Point a browser or HTTP client at the proxy port (8080) to send requests through the tunnel.
+**Client (TOML Mode)**: `java -cp target\tunnel-1.0-SNAPSHOT.jar com.acuity.client.TunnelClientApp <config-file.toml>`
 
 ## Notes
-- The proxy client expects raw HTTP requests from the browser and forwards the HTTP response back to the tunnel server.
+- The proxy client expects raw TCP requests from a user TCP program through the tunnel server and forwards the TCP response back to the user TCP program through the tunnel.
+- The proxy port is the port mapping to the proxy client target port. When a user TCP program connects to the proxy port on the tunnel server, the tunnel server forwards the request through the tunnel to the proxy client, which then makes a TCP connection to the target host and target port, and returns the response back through the tunnel.
 - The tunnel server must be running before the proxy client connects.
 - All communication between client and tunnel server is encrypted using AES-256 symmetric encryption.
 - **Important**: The client and server must use the same encryption key. Either:
