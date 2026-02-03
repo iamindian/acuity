@@ -32,9 +32,6 @@ public class TunnelClientApp {
     public void start() throws InterruptedException {
         EventLoopGroup group = new NioEventLoopGroup();
         try {
-            // Initialize symmetric encryption key
-            SymmetricEncryption.getOrGenerateKey();
-
             Bootstrap bootstrap = new Bootstrap();
             bootstrap.group(group)
                 .channel(NioSocketChannel.class)
@@ -90,16 +87,17 @@ public class TunnelClientApp {
             sharedKey = args[5];
         }
 
+        if (sharedKey == null || sharedKey.isEmpty()) {
+            System.err.println("Error: Shared encryption key is required!");
+            System.err.println("Usage: java TunnelClientApp <tunnelHost> <tunnelPort> <proxyPort> <targetHost> <targetPort> <sharedKey>");
+            System.err.println("Get the shared key from the tunnel server output when it starts.");
+            System.exit(1);
+        }
+
         try {
-            if (sharedKey != null && !sharedKey.isEmpty()) {
-                // Set the shared key from command line argument (Base64-encoded)
-                SymmetricEncryption.setSecretKeyFromBase64(sharedKey);
-                System.out.println("Using provided shared encryption key");
-            } else {
-                // Generate a new key (should match server's key in production)
-                SymmetricEncryption.getOrGenerateKey();
-                System.out.println("Warning: Generated new encryption key - must match server's key!");
-            }
+            // Set the shared key from command line argument (Base64-encoded)
+            SymmetricEncryption.setSecretKeyFromBase64(sharedKey);
+            System.out.println("Using provided shared encryption key");
         } catch (Exception e) {
             throw new RuntimeException("Failed to initialize encryption key", e);
         }
