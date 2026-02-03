@@ -72,7 +72,7 @@ public class TunnelServerApp {
         return result;
     }
 
-    public static Map<Integer, TunnelServerApp> getAllBrowserClientInstances() {
+    public static Map<Integer, TunnelServerApp> getAllUserClientInstances() {
         return new HashMap<>(userClientInstances);
     }
 
