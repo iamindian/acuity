@@ -28,8 +28,8 @@ public class TestTcpClientServerTest {
     private static final long STARTUP_DELAY_MS = 2000;
 
     // Shared encryption key (password) - Base64 encoded AES-256 key (32 bytes)
-    // This is a valid 256-bit key generated from 32 random bytes
-    private static final String SHARED_KEY_PASSWORD = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+    // Generated using PowerShell: [System.Convert]::ToBase64String((1..32 | ForEach-Object { [byte](Get-Random -Maximum 256) }))
+    private static final String SHARED_KEY_PASSWORD = "Hu5SNsC4RUrRO06vtNWkRwVDeR2phas3Pih7D+uJ/V4=";
 
     private static Thread tunnelServerThread;
     private static Thread tunnelClientThread;
