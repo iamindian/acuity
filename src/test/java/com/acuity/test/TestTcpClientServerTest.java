@@ -28,8 +28,8 @@ public class TestTcpClientServerTest {
     private static final long STARTUP_DELAY_MS = 2000;
 
     // Shared encryption key (password) - Base64 encoded AES-256 key (32 bytes)
-    // This is a valid 256-bit key: "MySecretKeyForAESEncryption1234" (32 bytes)
-    private static final String SHARED_KEY_PASSWORD = "TXlTZWNyZXRLZXlGb3JBRVNFbmNyeXB0aW9uMTIzNA==";
+    // This is a valid 256-bit key generated from 32 random bytes
+    private static final String SHARED_KEY_PASSWORD = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 
     private static Thread tunnelServerThread;
     private static Thread tunnelClientThread;
