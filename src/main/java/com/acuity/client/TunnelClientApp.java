@@ -3,6 +3,7 @@ package com.acuity.client;
 import com.acuity.common.SymmetricDecryptionHandler;
 import com.acuity.common.SymmetricEncryption;
 import com.acuity.common.SymmetricEncryptionHandler;
+import com.acuity.config.ClientConfig;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
@@ -41,10 +42,10 @@ public class TunnelClientApp {
             // Initialize symmetric encryption key
             if (sharedKey != null && !sharedKey.isEmpty()) {
                 SymmetricEncryption.setSecretKeyFromBase64(sharedKey);
-                System.out.println("Using provided shared encryption key");
+                System.out.println("[TunnelClient] Using provided shared encryption key");
             } else {
                 SymmetricEncryption.getOrGenerateKey();
-                System.out.println("Warning: Generated new encryption key - must match server's key!");
+                System.out.println("[TunnelClient] Warning: Generated new encryption key - must match server's key!");
             }
 
             Bootstrap bootstrap = new Bootstrap();
@@ -65,10 +66,19 @@ public class TunnelClientApp {
                 .option(ChannelOption.TCP_NODELAY, true);
 
             ChannelFuture future = bootstrap.connect(tunnelHost, tunnelPort).sync();
-            System.out.println("Connected to tunnel server at " + tunnelHost + ":" + tunnelPort + " with symmetric encryption");
-            future.channel().closeFuture().sync();
+            System.out.println("[TunnelClient] Connected to tunnel server at " + tunnelHost + ":" + tunnelPort + " with symmetric encryption");
+
+            try {
+                future.channel().closeFuture().sync();
+            } catch (InterruptedException e) {
+                System.out.println("[TunnelClient] Client interrupted, shutting down gracefully");
+                future.channel().close();
+            }
+        } catch (InterruptedException e) {
+            System.out.println("[TunnelClient] Interrupted during startup");
+            Thread.currentThread().interrupt();
         } catch (Exception e) {
-            throw new RuntimeException("Failed to start tunnel client", e);
+            e.printStackTrace();
         } finally {
             group.shutdownGracefully();
         }
@@ -76,39 +86,50 @@ public class TunnelClientApp {
 
 
     public static void main(String[] args) throws InterruptedException {
-        String tunnelHost = "127.0.0.1";
-        int tunnelPort = 7000;
-        int proxyPort = 8080;
-        String targetHost = "127.0.0.1";
-        int targetPort = 80;
-        String sharedKey = null;
+        ClientConfig config = new ClientConfig();
 
-        if (args.length > 0) {
-            tunnelHost = args[0];
-        }
-        if (args.length > 1) {
-            tunnelPort = Integer.parseInt(args[1]);
-        }
-        if (args.length > 2) {
-            proxyPort = Integer.parseInt(args[2]);
-        }
-        if (args.length > 3) {
-            targetHost = args[3];
-        }
-        if (args.length > 4) {
-            targetPort = Integer.parseInt(args[4]);
-        }
-        if (args.length > 5) {
-            sharedKey = args[5];
+        // If first argument is a TOML file, load from it
+        if (args.length > 0 && args[0].endsWith(".toml")) {
+            try {
+                config = ClientConfig.loadFromFile(args[0]);
+                System.out.println("[TunnelClient] Configuration loaded from: " + args[0]);
+            } catch (Exception e) {
+                System.err.println("[TunnelClient] Failed to load configuration file: " + e.getMessage());
+                System.exit(1);
+            }
+        } else {
+            // Otherwise, use command line arguments (legacy mode)
+            config = new ClientConfig();
+            if (args.length > 0) {
+                config.setTunnelHost(args[0]);
+            }
+            if (args.length > 1) {
+                config.setTunnelPort(Integer.parseInt(args[1]));
+            }
+            if (args.length > 2) {
+                config.setProxyPort(Integer.parseInt(args[2]));
+            }
+            if (args.length > 3) {
+                config.setTargetHost(args[3]);
+            }
+            if (args.length > 4) {
+                config.setTargetPort(Integer.parseInt(args[4]));
+            }
+            if (args.length > 5) {
+                config.setSharedKey(args[5]);
+            }
         }
 
-        if (sharedKey == null || sharedKey.isEmpty()) {
-            System.err.println("Error: Shared encryption key is required!");
-            System.err.println("Usage: java TunnelClientApp <tunnelHost> <tunnelPort> <proxyPort> <targetHost> <targetPort> <sharedKey>");
-            System.err.println("Get the shared key from the tunnel server output when it starts.");
+        if (config.getSharedKey() == null || config.getSharedKey().isEmpty()) {
+            System.err.println("[TunnelClient] Error: Shared encryption key is required!");
+            System.err.println("[TunnelClient] Usage: java TunnelClientApp <config-file.toml>");
+            System.err.println("[TunnelClient] Or (legacy): java TunnelClientApp <tunnelHost> <tunnelPort> <proxyPort> <targetHost> <targetPort> <sharedKey>");
+            System.err.println("[TunnelClient] Get the shared key from the tunnel server output when it starts.");
             System.exit(1);
         }
 
-        new TunnelClientApp(tunnelHost, tunnelPort, proxyPort, targetHost, targetPort, sharedKey).start();
+        System.out.println("[TunnelClient] " + config);
+        new TunnelClientApp(config.getTunnelHost(), config.getTunnelPort(), config.getProxyPort(),
+                           config.getTargetHost(), config.getTargetPort(), config.getSharedKey()).start();
     }
 }

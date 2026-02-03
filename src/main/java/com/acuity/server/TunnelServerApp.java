@@ -3,6 +3,7 @@ package com.acuity.server;
 import com.acuity.common.SymmetricDecryptionHandler;
 import com.acuity.common.SymmetricEncryption;
 import com.acuity.common.SymmetricEncryptionHandler;
+import com.acuity.config.ServerConfig;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
@@ -94,10 +95,10 @@ public class TunnelServerApp {
             // Initialize symmetric encryption key
             if (sharedKey != null && !sharedKey.isEmpty()) {
                 SymmetricEncryption.setSecretKeyFromBase64(sharedKey);
-                System.out.println("Using provided shared encryption key");
+                System.out.println("[TunnelServer] Using provided shared encryption key");
             } else {
                 SymmetricEncryption.getOrGenerateKey();
-                System.out.println("Generated encryption key: " + SymmetricEncryption.getKeyAsString());
+                System.out.println("[TunnelServer] Generated encryption key: " + SymmetricEncryption.getKeyAsString());
             }
 
             ServerBootstrap bootstrap = new ServerBootstrap();
@@ -127,11 +128,19 @@ public class TunnelServerApp {
                     .childOption(ChannelOption.TCP_NODELAY, true);
 
             ChannelFuture future = bootstrap.bind(port).sync();
-            System.out.println("Tunnel Server started on port " + port + " with symmetric encryption");
+            System.out.println("[TunnelServer] Tunnel Server started on port " + port + " with symmetric encryption");
 
-            future.channel().closeFuture().sync();
+            try {
+                future.channel().closeFuture().sync();
+            } catch (InterruptedException e) {
+                System.out.println("[TunnelServer] Server interrupted, shutting down gracefully");
+                future.channel().close();
+            }
+        } catch (InterruptedException e) {
+            System.out.println("[TunnelServer] Interrupted during startup");
+            Thread.currentThread().interrupt();
         } catch (Exception e) {
-            throw new RuntimeException("Failed to start tunnel server", e);
+            e.printStackTrace();
         } finally {
             bossGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
@@ -139,30 +148,43 @@ public class TunnelServerApp {
     }
 
     public static void main(String[] args) throws InterruptedException {
-        int tunnelServerPort = 7000;
-        String sharedKey = null;
+        ServerConfig config = new ServerConfig();
 
-        if (args.length > 0) {
-            tunnelServerPort = Integer.parseInt(args[0]);
-        }
-        if (args.length > 1) {
-            sharedKey = args[1];
+        // If first argument is a TOML file, load from it
+        if (args.length > 0 && args[0].endsWith(".toml")) {
+            try {
+                config = ServerConfig.loadFromFile(args[0]);
+                System.out.println("[TunnelServer] Configuration loaded from: " + args[0]);
+            } catch (Exception e) {
+                System.err.println("[TunnelServer] Failed to load configuration file: " + e.getMessage());
+                System.exit(1);
+            }
+        } else {
+            // Otherwise, use command line arguments (legacy mode)
+            if (args.length > 0) {
+                config = new ServerConfig();
+                config.setPort(Integer.parseInt(args[0]));
+            }
+            if (args.length > 1) {
+                config.setSharedKey(args[1]);
+            }
         }
 
         try {
-            if (sharedKey != null && !sharedKey.isEmpty()) {
-                // Set the shared key from command line argument (Base64-encoded)
-                SymmetricEncryption.setSecretKeyFromBase64(sharedKey);
-                System.out.println("Using provided shared encryption key");
+            if (config.getSharedKey() != null && !config.getSharedKey().isEmpty()) {
+                // Set the shared key from configuration (Base64-encoded)
+                SymmetricEncryption.setSecretKeyFromBase64(config.getSharedKey());
+                System.out.println("[TunnelServer] Using provided shared encryption key");
             } else {
                 // Generate a new key and print it for sharing with clients
                 SymmetricEncryption.getOrGenerateKey();
-                System.out.println("Generated encryption key: " + SymmetricEncryption.getKeyAsString());
+                System.out.println("[TunnelServer] Generated encryption key: " + SymmetricEncryption.getKeyAsString());
             }
         } catch (Exception e) {
             throw new RuntimeException("Failed to initialize encryption key", e);
         }
 
-        new TunnelServerApp(tunnelServerPort, ClientType.SERVER).start();
+        System.out.println("[TunnelServer] " + config);
+        new TunnelServerApp(config.getPort(), ClientType.SERVER, config.getSharedKey()).start();
     }
 }
