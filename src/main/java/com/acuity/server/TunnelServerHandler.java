@@ -11,8 +11,8 @@ import java.util.List;
  */
 public class TunnelServerHandler extends ServerHandler {
 
-    public TunnelServerHandler(Map<Integer, List<TunnelServerApp>> proxyClientInstances, Map<Integer, TunnelServerApp> browserClientInstances, Map<Integer, TunnelServerApp> serverInstances) {
-        super(proxyClientInstances, browserClientInstances, serverInstances);
+    public TunnelServerHandler(Map<Integer, List<TunnelServerApp>> proxyClientInstances, Map<Integer, TunnelServerApp> userClientInstances, Map<Integer, TunnelServerApp> serverInstances) {
+        super(proxyClientInstances, userClientInstances, serverInstances);
     }
 
     @Override

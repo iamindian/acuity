@@ -29,7 +29,7 @@ public class TunnelServerApp {
     }
 
     private static final Map<Integer, List<TunnelServerApp>> proxyClientInstances = new HashMap<>();
-    private static final Map<Integer, TunnelServerApp> browserClientInstances = new HashMap<>();
+    private static final Map<Integer, TunnelServerApp> userClientInstances = new HashMap<>();
     private static final Map<Integer, TunnelServerApp> serverInstances = new HashMap<>();
 
     private final int port;
@@ -41,7 +41,7 @@ public class TunnelServerApp {
         if (clientType == ClientType.PROXY) {
             proxyClientInstances.computeIfAbsent(port, k -> new ArrayList<>()).add(this);
         } else if (clientType == ClientType.BROWSER) {
-            browserClientInstances.put(port, this);
+            userClientInstances.put(port, this);
         } else {
             serverInstances.put(port, this);
         }
@@ -57,7 +57,7 @@ public class TunnelServerApp {
     }
 
     public static TunnelServerApp getBrowserClientInstance(int port) {
-        return browserClientInstances.get(port);
+        return userClientInstances.get(port);
     }
 
     public static TunnelServerApp getServerInstance(int port) {
@@ -73,7 +73,7 @@ public class TunnelServerApp {
     }
 
     public static Map<Integer, TunnelServerApp> getAllBrowserClientInstances() {
-        return new HashMap<>(browserClientInstances);
+        return new HashMap<>(userClientInstances);
     }
 
     public static Map<Integer, TunnelServerApp> getAllServerInstances() {
@@ -104,9 +104,9 @@ public class TunnelServerApp {
                             if (clientType == ClientType.PROXY) {
                                 ch.pipeline().addLast(new ProxyClientHandler(proxyClientInstances));
                             } else if (clientType == ClientType.BROWSER) {
-                                ch.pipeline().addLast(new UserClientHandler(browserClientInstances));
+                                ch.pipeline().addLast(new UserClientHandler(userClientInstances));
                             } else {
-                                ch.pipeline().addLast(new TunnelServerHandler(proxyClientInstances, browserClientInstances, serverInstances));
+                                ch.pipeline().addLast(new TunnelServerHandler(proxyClientInstances, userClientInstances, serverInstances));
                             }
                         }
                     })

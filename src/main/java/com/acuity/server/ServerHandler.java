@@ -21,12 +21,12 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
     protected static final Map<String, ChannelHandlerContext> browserClientContexts = new ConcurrentHashMap<>();
 
     protected final Map<Integer, List<TunnelServerApp>> proxyClientInstances;
-    protected final Map<Integer, TunnelServerApp> browserClientInstances;
+    protected final Map<Integer, TunnelServerApp> userClientInstances;
     protected final Map<Integer, TunnelServerApp> serverInstances;
 
-    public ServerHandler(Map<Integer, List<TunnelServerApp>> proxyClientInstances, Map<Integer, TunnelServerApp> browserClientInstances, Map<Integer, TunnelServerApp> serverInstances) {
+    public ServerHandler(Map<Integer, List<TunnelServerApp>> proxyClientInstances, Map<Integer, TunnelServerApp> userClientInstances, Map<Integer, TunnelServerApp> serverInstances) {
         this.proxyClientInstances = proxyClientInstances;
-        this.browserClientInstances = browserClientInstances;
+        this.userClientInstances = userClientInstances;
         this.serverInstances = serverInstances;
     }
 

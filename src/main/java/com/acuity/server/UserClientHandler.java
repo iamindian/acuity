@@ -15,8 +15,8 @@ import java.util.Random;
 public class UserClientHandler extends ServerHandler {
     private final Random random = new Random();
 
-    public UserClientHandler(Map<Integer, TunnelServerApp> browserClientInstances) {
-        super(null, browserClientInstances, null);
+    public UserClientHandler(Map<Integer, TunnelServerApp> userClientInstances) {
+        super(null, userClientInstances, null);
     }
 
     @Override
