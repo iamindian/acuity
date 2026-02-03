@@ -10,12 +10,12 @@ import java.util.Map;
 import java.util.Random;
 
 /**
- * Handler for browser client connections
+ * Handler for user client connections
  */
-public class BrowserClientHandler extends ServerHandler {
+public class UserClientHandler extends ServerHandler {
     private final Random random = new Random();
 
-    public BrowserClientHandler(Map<Integer, TunnelServerApp> browserClientInstances) {
+    public UserClientHandler(Map<Integer, TunnelServerApp> browserClientInstances) {
         super(null, browserClientInstances, null);
     }
 
@@ -23,7 +23,7 @@ public class BrowserClientHandler extends ServerHandler {
     public void channelActive(ChannelHandlerContext ctx) {
         String channelId = ctx.channel().id().asShortText();
         browserClientContexts.put(channelId, ctx);
-        System.out.println("[Channel: " + channelId + "] Browser client connected: " + ctx.channel().remoteAddress());
+        System.out.println("[Channel: " + channelId + "] User client connected: " + ctx.channel().remoteAddress());
     }
 
     @Override

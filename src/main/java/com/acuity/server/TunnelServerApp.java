@@ -104,7 +104,7 @@ public class TunnelServerApp {
                             if (clientType == ClientType.PROXY) {
                                 ch.pipeline().addLast(new ProxyClientHandler(proxyClientInstances));
                             } else if (clientType == ClientType.BROWSER) {
-                                ch.pipeline().addLast(new BrowserClientHandler(browserClientInstances));
+                                ch.pipeline().addLast(new UserClientHandler(browserClientInstances));
                             } else {
                                 ch.pipeline().addLast(new TunnelServerHandler(proxyClientInstances, browserClientInstances, serverInstances));
                             }
