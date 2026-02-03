@@ -7,16 +7,24 @@ import io.netty.handler.codec.ByteToMessageDecoder;
 import java.util.List;
 
 /**
- * Netty handler for decrypting incoming tunnel messages
+ * Netty handler for decrypting and decompressing incoming tunnel messages
+ * Format: [1 byte compression flag][4 bytes encrypted length][encrypted data]
  */
 public class SymmetricDecryptionHandler extends ByteToMessageDecoder {
     @Override
     protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
-        if (in.readableBytes() < 4) {
-            return; // Not enough data for length
+        // Need at least 1 byte for compression flag + 4 bytes for length
+        if (in.readableBytes() < 5) {
+            return;
         }
 
         in.markReaderIndex();
+
+        // Read compression flag (1 byte)
+        byte compressionFlag = in.readByte();
+        boolean isCompressed = (compressionFlag & 0xFF) == 1;
+
+        // Read message length (4 bytes)
         int messageLength = in.readInt();
 
         if (in.readableBytes() < messageLength) {
@@ -28,10 +36,21 @@ public class SymmetricDecryptionHandler extends ByteToMessageDecoder {
         in.readBytes(encryptedData);
 
         try {
+            // Decrypt the data
             byte[] decryptedData = SymmetricEncryption.decrypt(encryptedData);
-            out.add(Unpooled.copiedBuffer(decryptedData));
+
+            // Decompress if needed
+            if (isCompressed) {
+                byte[] decompressedData = DataCompression.decompress(decryptedData);
+                System.out.println("[Decompression] Decrypted data: compressed=" + decryptedData.length +
+                    " bytes, decompressed=" + decompressedData.length + " bytes, ratio=" +
+                    String.format("%.2f%%", DataCompression.getCompressionRatio(decompressedData.length, decryptedData.length)));
+                out.add(Unpooled.copiedBuffer(decompressedData));
+            } else {
+                out.add(Unpooled.copiedBuffer(decryptedData));
+            }
         } catch (Exception e) {
-            System.err.println("Decryption failed: " + e.getMessage());
+            System.err.println("Decryption/Decompression failed: " + e.getMessage());
             e.printStackTrace();
         }
     }
