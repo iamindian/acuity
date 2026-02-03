@@ -139,8 +139,8 @@ public class TunnelServerApp {
 
         try {
             if (sharedKey != null && !sharedKey.isEmpty()) {
-                // Set the shared key from command line argument
-                SymmetricEncryption.setSecretKey(java.util.Base64.getDecoder().decode(sharedKey));
+                // Set the shared key from command line argument (Base64-encoded)
+                SymmetricEncryption.setSecretKeyFromBase64(sharedKey);
                 System.out.println("Using provided shared encryption key");
             } else {
                 // Generate a new key and print it for sharing with clients

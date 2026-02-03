@@ -37,6 +37,14 @@ public class SymmetricEncryption {
     }
 
     /**
+     * Set secret key from Base64-encoded string (for command-line convenience)
+     */
+    public static synchronized void setSecretKeyFromBase64(String base64Key) {
+        byte[] decodedKey = Base64.getDecoder().decode(base64Key);
+        setSecretKey(decodedKey);
+    }
+
+    /**
      * Get the secret key as base64 encoded string for sharing
      */
     public static String getKeyAsString() throws Exception {
