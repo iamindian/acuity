@@ -55,7 +55,7 @@ public class TestTcpClientServerTest {
     }
 
     @AfterClass
-    public static void tearDownAfterClass() throws Exception {
+    public static void tearDownAfterClass() {
         System.out.println("=== Shutting down infrastructure ===");
 
         // Interrupt all threads gracefully
@@ -64,7 +64,7 @@ public class TestTcpClientServerTest {
             try {
                 testTcpServerThread.join(3000);
             } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+                System.out.println("[TestTcpServer] Shutdown interrupted");
             }
         }
 
@@ -73,7 +73,7 @@ public class TestTcpClientServerTest {
             try {
                 tunnelClientThread.join(3000);
             } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+                System.out.println("[TunnelClient] Shutdown interrupted");
             }
         }
 
@@ -82,7 +82,7 @@ public class TestTcpClientServerTest {
             try {
                 tunnelServerThread.join(3000);
             } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+                System.out.println("[TunnelServer] Shutdown interrupted");
             }
         }
 
