@@ -10,10 +10,16 @@ import java.util.Map;
 import java.util.Random;
 
 /**
- * Handler for user client connections
+ * Handler for user client connections with streaming data support
  */
 public class UserClientHandler extends ServerHandler {
     private final Random random = new Random();
+
+    // Streaming configuration
+    private static final int CHUNK_SIZE = 8192; // 8KB chunks for streaming
+    private static final String STREAM_START_ACTION = "STREAM_START";
+    private static final String STREAM_DATA_ACTION = "STREAM_DATA";
+    private static final String STREAM_END_ACTION = "STREAM_END";
 
     public UserClientHandler(Map<Integer, TunnelServerApp> userClientInstances) {
         super(null, userClientInstances, null);
@@ -54,16 +60,58 @@ public class UserClientHandler extends ServerHandler {
             return;
         }
 
-        // Create TunnelMessage
-        TunnelMessage tunnelMessage = new TunnelMessage(browserChannelId, "FORWARD", data);
-
-        System.out.println("[TunnelServer] [Channel: " + browserChannelId + "] Encapsulating message and sending to proxy channel: " + selectedProxyChannelId);
-        System.out.println("[TunnelServer] [Channel: " + browserChannelId + "] TunnelMessage: " + tunnelMessage);
-
-        // Serialize and send the TunnelMessage to the proxy channel
-        byte[] serializedMessage = tunnelMessage.toBytes();
-        proxyCtx.writeAndFlush(Unpooled.copiedBuffer(serializedMessage));
+        // Stream the data in chunks if it's large
+        streamDataToProxy(browserChannelId, data, proxyCtx);
 
         byteBuf.release();
+    }
+
+    /**
+     * Stream data from user client to proxy client in chunks
+     * Sends STREAM_START, followed by STREAM_DATA chunks, then STREAM_END
+     */
+    private void streamDataToProxy(String browserChannelId, byte[] data, ChannelHandlerContext proxyCtx) {
+        if (data.length <= CHUNK_SIZE) {
+            // Small data: send as single FORWARD message
+            System.out.println("[TunnelServer] [Channel: " + browserChannelId + "] Sending small message (" + data.length + " bytes) to proxy");
+            TunnelMessage tunnelMessage = new TunnelMessage(browserChannelId, "FORWARD", data);
+            byte[] serializedMessage = tunnelMessage.toBytes();
+            proxyCtx.write(Unpooled.copiedBuffer(serializedMessage));
+            proxyCtx.flush();
+        } else {
+            // Large data: stream in chunks
+            System.out.println("[TunnelServer] [Channel: " + browserChannelId + "] Streaming large message (" + data.length + " bytes) to proxy in " + CHUNK_SIZE + " byte chunks");
+
+            // Send STREAM_START message
+            TunnelMessage startMessage = new TunnelMessage(browserChannelId, STREAM_START_ACTION,
+                String.valueOf(data.length).getBytes(CharsetUtil.UTF_8));
+            proxyCtx.write(Unpooled.copiedBuffer(startMessage.toBytes()));
+
+            // Send data in chunks
+            int offset = 0;
+            int chunkNumber = 1;
+            while (offset < data.length) {
+                int chunkLength = Math.min(CHUNK_SIZE, data.length - offset);
+                byte[] chunk = new byte[chunkLength];
+                System.arraycopy(data, offset, chunk, 0, chunkLength);
+
+                TunnelMessage chunkMessage = new TunnelMessage(browserChannelId, STREAM_DATA_ACTION, chunk);
+                proxyCtx.write(Unpooled.copiedBuffer(chunkMessage.toBytes()));
+
+                System.out.println("[TunnelServer] [Channel: " + browserChannelId + "] Sent chunk " + chunkNumber +
+                    " (" + chunkLength + " bytes, offset: " + offset + ")");
+
+                offset += chunkLength;
+                chunkNumber++;
+            }
+
+            // Send STREAM_END message
+            TunnelMessage endMessage = new TunnelMessage(browserChannelId, STREAM_END_ACTION, new byte[0]);
+            proxyCtx.write(Unpooled.copiedBuffer(endMessage.toBytes()));
+            proxyCtx.flush();
+
+            System.out.println("[TunnelServer] [Channel: " + browserChannelId + "] Stream completed: " +
+                (chunkNumber - 1) + " chunks sent");
+        }
     }
 }
