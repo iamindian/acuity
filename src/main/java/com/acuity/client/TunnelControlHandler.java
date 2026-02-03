@@ -32,7 +32,7 @@ public class TunnelControlHandler extends ChannelInboundHandlerAdapter {
         String action = "ADDPROXY:" + clientApp.proxyPort;
         TunnelMessage msg = new TunnelMessage(null, action, new byte[0]);
         ctx.writeAndFlush(Unpooled.copiedBuffer(msg.toBytes()));
-        System.out.println("Sent control message: " + action);
+        System.out.println("[TunnelClient] Sent control message: " + action);
     }
 
     @Override
@@ -43,7 +43,7 @@ public class TunnelControlHandler extends ChannelInboundHandlerAdapter {
             byteBuf.readBytes(bytes);
             TunnelMessage tunnelMessage = TunnelMessage.fromBytes(bytes);
 
-            System.out.println("Control channel received: " + tunnelMessage);
+            System.out.println("[TunnelClient] Control channel received: " + tunnelMessage);
 
             String action = tunnelMessage.getAction();
             if (action == null) {
@@ -61,15 +61,15 @@ public class TunnelControlHandler extends ChannelInboundHandlerAdapter {
                         TunnelMessage responseMsg = new TunnelMessage(browserChannelId, "FORWARD", responseBytes);
                         ctx.writeAndFlush(Unpooled.copiedBuffer(responseMsg.toBytes()));
                     } catch (Exception e) {
-                        System.err.println("Error executing TCP request: " + e.getMessage());
+                        System.err.println("[TunnelClient] Error executing TCP request: " + e.getMessage());
                         e.printStackTrace();
                     }
                 });
             } else if ("RESPONSE".equalsIgnoreCase(action)) {
-                System.out.println("Proxy " + clientApp.proxyPort + " has been opened.");
+                System.out.println("[TunnelClient] Proxy " + clientApp.proxyPort + " has been opened.");
             } else if ("ERROR".equalsIgnoreCase(action)) {
                 String errorMsg = new String(tunnelMessage.getData(), StandardCharsets.UTF_8);
-                System.err.println("Tunnel server error: " + errorMsg);
+                System.err.println("[TunnelClient] Tunnel server error: " + errorMsg);
             }
         } finally {
             byteBuf.release();
