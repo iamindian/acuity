@@ -43,14 +43,14 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
             // Deserialize TunnelMessage
             TunnelMessage tunnelMessage = TunnelMessage.fromBytes(bytes);
 
-            System.out.println("[Channel: " + channelId + "] Server received TunnelMessage: " + tunnelMessage);
+            System.out.println("[TunnelServer] [Channel: " + channelId + "] Server received TunnelMessage: " + tunnelMessage);
 
             // Handle the tunnel message
             handleTunnelMessage(ctx, tunnelMessage, channelId);
 
         } catch (IllegalArgumentException e) {
             // If deserialization fails, log the error
-            System.err.println("[Channel: " + channelId + "] Failed to deserialize TunnelMessage: " + e.getMessage());
+            System.err.println("[TunnelServer] [Channel: " + channelId + "] Failed to deserialize TunnelMessage: " + e.getMessage());
         } finally {
             byteBuf.release();
         }
@@ -61,7 +61,7 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         String action = tunnelMessage.getAction();
 
         if (action == null) {
-            System.out.println("[Channel: " + channelId + "] Received message with null action");
+            System.out.println("[TunnelServer] [Channel: " + channelId + "] Received message with null action");
             return;
         }
 
@@ -76,18 +76,18 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
                 handleExitAction(ctx, tunnelMessage, channelId);
                 break;
             default:
-                System.out.println("[Channel: " + channelId + "] Unknown action: " + action);
+                System.out.println("[TunnelServer] [Channel: " + channelId + "] Unknown action: " + action);
         }
     }
 
     protected void handleForwardAction(ChannelHandlerContext ctx, TunnelMessage tunnelMessage, String channelId) {
         // Default implementation - subclasses should override
-        System.out.println("[Channel: " + channelId + "] Handling FORWARD action with data length: " +
+        System.out.println("[TunnelServer] [Channel: " + channelId + "] Handling FORWARD action with data length: " +
             (tunnelMessage.getData() != null ? tunnelMessage.getData().length : 0));
     }
 
     protected void handlePingAction(ChannelHandlerContext ctx, TunnelMessage tunnelMessage, String channelId) {
-        System.out.println("[Channel: " + channelId + "] Received PING");
+        System.out.println("[TunnelServer] [Channel: " + channelId + "] Received PING");
         // Send PONG response
         TunnelMessage pong = new TunnelMessage(
             tunnelMessage.getBrowserChannelId(),
@@ -98,7 +98,7 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
     }
 
     protected void handleExitAction(ChannelHandlerContext ctx, TunnelMessage tunnelMessage, String channelId) {
-        System.out.println("[Channel: " + channelId + "] Received EXIT, closing connection");
+        System.out.println("[TunnelServer] [Channel: " + channelId + "] Received EXIT, closing connection");
         ctx.flush();
         ctx.close();
     }
@@ -118,7 +118,7 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void channelActive(ChannelHandlerContext ctx) {
         String channelId = ctx.channel().id().asShortText();
-        System.out.println("[Channel: " + channelId + "] Client connected: " + ctx.channel().remoteAddress());
+        System.out.println("[TunnelServer] [Channel: " + channelId + "] Client connected: " + ctx.channel().remoteAddress());
     }
 
     @Override
@@ -126,7 +126,7 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         if (evt instanceof IdleStateEvent) {
             IdleStateEvent event = (IdleStateEvent) evt;
             String channelId = ctx.channel().id().asShortText();
-            System.out.println("[Channel: " + channelId + "] Idle detected: " + event.state());
+            System.out.println("[TunnelServer] [Channel: " + channelId + "] Idle detected: " + event.state());
 
             // Send PING to keep connection alive
             ctx.writeAndFlush(Unpooled.copiedBuffer("PING\n", CharsetUtil.UTF_8));
@@ -144,7 +144,7 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         proxyClientContexts.remove(channelId);
         browserClientContexts.remove(channelId);
 
-        System.out.println("[Channel: " + channelId + "] Client disconnected: " + ctx.channel().remoteAddress());
+        System.out.println("[TunnelServer] [Channel: " + channelId + "] Client disconnected: " + ctx.channel().remoteAddress());
     }
 
     public static Map<String, ChannelHandlerContext> getProxyClientContexts() {

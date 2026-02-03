@@ -18,7 +18,7 @@ public class TunnelServerHandler extends ServerHandler {
     @Override
     public void channelActive(ChannelHandlerContext ctx) {
         String channelId = ctx.channel().id().asShortText();
-        System.out.println("[Channel: " + channelId + "] Tunnel server client connected: " + ctx.channel().remoteAddress());
+        System.out.println("[TunnelServer] [Channel: " + channelId + "] Tunnel server client connected: " + ctx.channel().remoteAddress());
     }
 
     @Override
@@ -26,7 +26,7 @@ public class TunnelServerHandler extends ServerHandler {
         String action = tunnelMessage.getAction();
 
         if (action == null) {
-            System.out.println("[Channel: " + channelId + "] Received message with null action");
+            System.out.println("[TunnelServer] [Channel: " + channelId + "] Received message with null action");
             return;
         }
 
@@ -59,7 +59,7 @@ public class TunnelServerHandler extends ServerHandler {
                 );
                 ctx.writeAndFlush(Unpooled.copiedBuffer(responseMsg.toBytes()));
 
-                System.out.println("[Channel: " + channelId + "] " + response);
+                System.out.println("[TunnelServer] [Channel: " + channelId + "] " + response);
             } catch (NumberFormatException e) {
                 String errorMsg = "Invalid port number in proxy command: " + action;
                 TunnelMessage errorResponse = new TunnelMessage(
@@ -68,7 +68,7 @@ public class TunnelServerHandler extends ServerHandler {
                     errorMsg.getBytes(CharsetUtil.UTF_8)
                 );
                 ctx.writeAndFlush(Unpooled.copiedBuffer(errorResponse.toBytes()));
-                System.err.println("[Channel: " + channelId + "] " + errorMsg);
+                System.err.println("[TunnelServer] [Channel: " + channelId + "] " + errorMsg);
             }
         } else {
             // Delegate to parent for standard actions (FORWARD, PING, EXIT, etc.)

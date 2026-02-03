@@ -18,7 +18,7 @@ public class ProxyClientHandler extends ServerHandler {
     public void channelActive(ChannelHandlerContext ctx) {
         String channelId = ctx.channel().id().asShortText();
         proxyClientContexts.put(channelId, ctx);
-        System.out.println("[Channel: " + channelId + "] Proxy client connected: " + ctx.channel().remoteAddress());
+        System.out.println("[TunnelServer] [Channel: " + channelId + "] Proxy client connected: " + ctx.channel().remoteAddress());
     }
 
     @Override
@@ -27,22 +27,22 @@ public class ProxyClientHandler extends ServerHandler {
         String browserChannelId = tunnelMessage.getBrowserChannelId();
         byte[] data = tunnelMessage.getData();
 
-        System.out.println("[Channel: " + channelId + "] Proxy forwarding data from browser channel: " +
+        System.out.println("[TunnelServer] [Channel: " + channelId + "] Proxy forwarding data from browser channel: " +
             browserChannelId + ", data length: " + (data != null ? data.length : 0));
 
         if (browserChannelId == null) {
-            System.out.println("[Channel: " + channelId + "] Missing browserChannelId; drop data");
+            System.out.println("[TunnelServer] [Channel: " + channelId + "] Missing browserChannelId; drop data");
             return;
         }
 
         ChannelHandlerContext browserCtx = browserClientContexts.get(browserChannelId);
         if (browserCtx == null || !browserCtx.channel().isActive()) {
-            System.out.println("[Channel: " + channelId + "] Browser channel not active: " + browserChannelId);
+            System.out.println("[TunnelServer] [Channel: " + channelId + "] Browser channel not active: " + browserChannelId);
             return;
         }
 
         if (data == null || data.length == 0) {
-            System.out.println("[Channel: " + channelId + "] No data to forward to browser channel: " + browserChannelId);
+            System.out.println("[TunnelServer] [Channel: " + channelId + "] No data to forward to browser channel: " + browserChannelId);
             return;
         }
 
