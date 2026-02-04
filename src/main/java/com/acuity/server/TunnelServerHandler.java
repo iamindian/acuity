@@ -57,7 +57,7 @@ public class TunnelServerHandler extends ServerHandler {
 
                 // Send response back
                 TunnelMessage responseMsg = new TunnelMessage(
-                    tunnelMessage.getBrowserChannelId(),
+                    tunnelMessage.getUserChannelId(),
                     "RESPONSE",
                     response.getBytes(CharsetUtil.UTF_8)
                 );
@@ -67,7 +67,7 @@ public class TunnelServerHandler extends ServerHandler {
             } catch (NumberFormatException e) {
                 String errorMsg = "Invalid port number in proxy command: " + action;
                 TunnelMessage errorResponse = new TunnelMessage(
-                    tunnelMessage.getBrowserChannelId(),
+                    tunnelMessage.getUserChannelId(),
                     "ERROR",
                     errorMsg.getBytes(CharsetUtil.UTF_8)
                 );

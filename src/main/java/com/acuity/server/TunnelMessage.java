@@ -7,18 +7,18 @@ import java.util.Base64;
  * Message class for tunnel communication
  */
 public class TunnelMessage {
-    private final String browserChannelId;
+    private final String userChannelId;
     private final String action;
     private final byte[] data;
 
-    public TunnelMessage(String browserChannelId, String action, byte[] data) {
-        this.browserChannelId = browserChannelId;
+    public TunnelMessage(String userChannelId, String action, byte[] data) {
+        this.userChannelId = userChannelId;
         this.action = action;
         this.data = data;
     }
 
-    public String getBrowserChannelId() {
-        return browserChannelId;
+    public String getUserChannelId() {
+        return userChannelId;
     }
 
     public String getAction() {
@@ -35,7 +35,7 @@ public class TunnelMessage {
     public byte[] toBytes() {
         String encodedData = data != null ? Base64.getEncoder().encodeToString(data) : "";
         String serialized = String.format("%s|%s|%s",
-            browserChannelId != null ? browserChannelId : "",
+            userChannelId != null ? userChannelId : "",
             action != null ? action : "",
             encodedData);
         return serialized.getBytes(StandardCharsets.UTF_8);
@@ -52,17 +52,17 @@ public class TunnelMessage {
             throw new IllegalArgumentException("Invalid TunnelMessage format");
         }
 
-        String browserChannelId = parts[0].isEmpty() ? null : parts[0];
+        String userChannelId = parts[0].isEmpty() ? null : parts[0];
         String action = parts[1].isEmpty() ? null : parts[1];
         byte[] data = parts[2].isEmpty() ? new byte[0] : Base64.getDecoder().decode(parts[2]);
 
-        return new TunnelMessage(browserChannelId, action, data);
+        return new TunnelMessage(userChannelId, action, data);
     }
 
     @Override
     public String toString() {
         return "TunnelMessage{" +
-                "browserChannelId='" + browserChannelId + '\'' +
+                "userChannelId='" + userChannelId + '\'' +
                 ", action='" + action + '\'' +
                 ", data.length=" + (data != null ? data.length : 0) +
                 '}';

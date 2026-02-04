@@ -30,7 +30,7 @@ public class ProxyClientHandler extends ServerHandler {
     @Override
     protected void handleTunnelMessage(ChannelHandlerContext ctx, TunnelMessage tunnelMessage, String channelId) {
         String action = tunnelMessage.getAction();
-        String browserChannelId = tunnelMessage.getBrowserChannelId();
+        String browserChannelId = tunnelMessage.getUserChannelId();
 
         // Handle streaming-specific actions
         if ("STREAM_START".equals(action)) {
@@ -99,7 +99,7 @@ public class ProxyClientHandler extends ServerHandler {
     @Override
     protected void handleForwardAction(ChannelHandlerContext ctx, TunnelMessage tunnelMessage, String channelId) {
         // Proxy receives FORWARD message and should forward data to the actual target
-        String browserChannelId = tunnelMessage.getBrowserChannelId();
+        String browserChannelId = tunnelMessage.getUserChannelId();
         byte[] data = tunnelMessage.getData();
 
         System.out.println("[TunnelServer] [Channel: " + channelId + "] Proxy forwarding data from browser channel: " + browserChannelId + ", data length: " + (data != null ? data.length : 0));

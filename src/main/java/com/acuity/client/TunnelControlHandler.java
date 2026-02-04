@@ -51,7 +51,7 @@ public class TunnelControlHandler extends ChannelInboundHandlerAdapter {
             }
 
             if ("FORWARD".equalsIgnoreCase(action)) {
-                String browserChannelId = tunnelMessage.getBrowserChannelId();
+                String browserChannelId = tunnelMessage.getUserChannelId();
                 byte[] requestBytes = tunnelMessage.getData();
 
                 // Execute TCP request asynchronously using thread pool

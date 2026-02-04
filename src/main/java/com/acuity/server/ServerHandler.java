@@ -90,7 +90,7 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         System.out.println("[TunnelServer] [Channel: " + channelId + "] Received PING");
         // Send PONG response
         TunnelMessage pong = new TunnelMessage(
-            tunnelMessage.getBrowserChannelId(),
+            tunnelMessage.getUserChannelId(),
             "PONG",
             new byte[0]
         );
