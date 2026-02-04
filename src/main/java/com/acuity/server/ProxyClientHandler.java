@@ -2,6 +2,9 @@ package com.acuity.server;
 
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
@@ -11,6 +14,7 @@ import java.util.Map;
  * Handler for proxy client connections with streaming support
  */
 public class ProxyClientHandler extends ServerHandler {
+    private static final Logger logger = LoggerFactory.getLogger(ProxyClientHandler.class);
 
     // Track streaming sessions: browserChannelId -> ByteBuffer for reassembling chunks
     private static final Map<String, StreamingSession> streamingSessions = new HashMap<>();
@@ -23,7 +27,7 @@ public class ProxyClientHandler extends ServerHandler {
     public void channelActive(ChannelHandlerContext ctx) {
         String channelId = ctx.channel().id().asShortText();
         proxyClientContexts.put(channelId, ctx);
-        System.out.println("[TunnelServer] [Channel: " + channelId + "] Proxy client connected: " + ctx.channel().remoteAddress());
+        logger.info("[TunnelServer] [Channel: {}] Proxy client connected: {}", channelId, ctx.channel().remoteAddress());
     }
 
     @Override
@@ -53,8 +57,8 @@ public class ProxyClientHandler extends ServerHandler {
         byte[] data = tunnelMessage.getData();
         long totalSize = Long.parseLong(new String(data, StandardCharsets.UTF_8));
 
-        System.out.println("[TunnelServer] [Channel: " + channelId + "] Stream START: browserChannel=" + browserChannelId +
-            ", totalSize=" + totalSize + " bytes");
+        logger.info("[TunnelServer] [Channel: {}] Stream START: browserChannel={}, totalSize={} bytes",
+            channelId, browserChannelId, totalSize);
 
         // Create streaming session
         StreamingSession session = new StreamingSession(browserChannelId, totalSize);
@@ -69,13 +73,14 @@ public class ProxyClientHandler extends ServerHandler {
 
         StreamingSession session = streamingSessions.get(browserChannelId);
         if (session == null) {
-            System.out.println("[TunnelServer] [Channel: " + channelId + "] ERROR: Received STREAM_DATA without STREAM_START for " + browserChannelId);
+            logger.error("[TunnelServer] [Channel: {}] ERROR: Received STREAM_DATA without STREAM_START for {}",
+                channelId, browserChannelId);
             return;
         }
 
         session.addChunk(chunk);
-        System.out.println("[TunnelServer] [Channel: " + channelId + "] Stream DATA: browserChannel=" + browserChannelId +
-            ", chunkSize=" + chunk.length + " bytes, accumulated=" + session.getAccumulatedSize() + "/" + session.getTotalSize());
+        logger.info("[TunnelServer] [Channel: {}] Stream DATA: browserChannel={}, chunkSize={} bytes, accumulated={}/{}",
+            channelId, browserChannelId, chunk.length, session.getAccumulatedSize(), session.getTotalSize());
     }
 
     /**
@@ -84,15 +89,16 @@ public class ProxyClientHandler extends ServerHandler {
     private void handleStreamEnd(ChannelHandlerContext ctx, TunnelMessage tunnelMessage, String channelId, String browserChannelId) {
         StreamingSession session = streamingSessions.get(browserChannelId);
         if (session == null) {
-            System.out.println("[TunnelServer] [Channel: " + channelId + "] ERROR: Received STREAM_END without STREAM_START for " + browserChannelId);
+            logger.error("[TunnelServer] [Channel: {}] ERROR: Received STREAM_END without STREAM_START for {}",
+                channelId, browserChannelId);
             return;
         }
 
         byte[] completeData = session.getCompleteData();
         streamingSessions.remove(browserChannelId);
 
-        System.out.println("[TunnelServer] [Channel: " + channelId + "] Stream END: browserChannel=" + browserChannelId +
-            ", totalData=" + completeData.length + " bytes");
+        logger.info("[TunnelServer] [Channel: {}] Stream END: browserChannel={}, totalData={} bytes",
+            channelId, browserChannelId, completeData.length);
 
         // Forward to browser channel
         forwardDataToUserClient(ctx, browserChannelId, completeData, channelId);
@@ -104,11 +110,11 @@ public class ProxyClientHandler extends ServerHandler {
         String browserChannelId = tunnelMessage.getBrowserChannelId();
         byte[] data = tunnelMessage.getData();
 
-        System.out.println("[TunnelServer] [Channel: " + channelId + "] Proxy forwarding data from browser channel: " +
-            browserChannelId + ", data length: " + (data != null ? data.length : 0));
+        logger.info("[TunnelServer] [Channel: {}] Proxy forwarding data from browser channel: {}, data length: {}",
+            channelId, browserChannelId, (data != null ? data.length : 0));
 
         if (browserChannelId == null) {
-            System.out.println("[TunnelServer] [Channel: " + channelId + "] Missing browserChannelId; drop data");
+            logger.warn("[TunnelServer] [Channel: {}] Missing browserChannelId; drop data", channelId);
             return;
         }
 
@@ -121,12 +127,12 @@ public class ProxyClientHandler extends ServerHandler {
     private void forwardDataToUserClient(ChannelHandlerContext ctx, String browserChannelId, byte[] data, String channelId) {
         ChannelHandlerContext browserCtx = userClientContexts.get(browserChannelId);
         if (browserCtx == null || !browserCtx.channel().isActive()) {
-            System.out.println("[TunnelServer] [Channel: " + channelId + "] Browser channel not active: " + browserChannelId);
+            logger.warn("[TunnelServer] [Channel: {}] Browser channel not active: {}", channelId, browserChannelId);
             return;
         }
 
         if (data == null || data.length == 0) {
-            System.out.println("[TunnelServer] [Channel: " + channelId + "] No data to forward to browser channel: " + browserChannelId);
+            logger.warn("[TunnelServer] [Channel: {}] No data to forward to browser channel: {}", channelId, browserChannelId);
             return;
         }
 
