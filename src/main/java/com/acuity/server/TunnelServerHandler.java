@@ -3,6 +3,8 @@ package com.acuity.server;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.util.CharsetUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 import java.util.List;
@@ -11,6 +13,7 @@ import java.util.List;
  * Handler for tunnel server connections (main server on port 7000)
  */
 public class TunnelServerHandler extends ServerHandler {
+    private static final Logger logger = LoggerFactory.getLogger(TunnelServerHandler.class);
 
     public TunnelServerHandler(Map<Integer, List<TunnelServerApp>> proxyClientInstances, Map<Integer, TunnelServerApp> userClientInstances, Map<Integer, TunnelServerApp> serverInstances) {
         super(proxyClientInstances, userClientInstances, serverInstances);
@@ -19,7 +22,7 @@ public class TunnelServerHandler extends ServerHandler {
     @Override
     public void channelActive(ChannelHandlerContext ctx) {
         String channelId = ctx.channel().id().asShortText();
-        System.out.println("[TunnelServer] [Channel: " + channelId + "] Tunnel server client connected: " + ctx.channel().remoteAddress());
+        logger.info("[TunnelServer] [Channel: {}] Tunnel server client connected: {}", channelId, ctx.channel().remoteAddress());
     }
 
     @Override
@@ -27,7 +30,7 @@ public class TunnelServerHandler extends ServerHandler {
         String action = tunnelMessage.getAction();
 
         if (action == null) {
-            System.out.println("[TunnelServer] [Channel: " + channelId + "] Received message with null action");
+            logger.warn("[TunnelServer] [Channel: {}] Received message with null action", channelId);
             return;
         }
 
@@ -44,7 +47,7 @@ public class TunnelServerHandler extends ServerHandler {
                     try {
                         newApp.start();
                     } catch (InterruptedException e) {
-                        e.printStackTrace();
+                        logger.error("[TunnelServer] Failed to start proxy server on port {}", proxyPort, e);
                     }
                 }).start();
 
@@ -60,7 +63,7 @@ public class TunnelServerHandler extends ServerHandler {
                 );
                 ctx.writeAndFlush(Unpooled.copiedBuffer(responseMsg.toBytes()));
 
-                System.out.println("[TunnelServer] [Channel: " + channelId + "] " + response);
+                logger.info("[TunnelServer] [Channel: {}] {}", channelId, response);
             } catch (NumberFormatException e) {
                 String errorMsg = "Invalid port number in proxy command: " + action;
                 TunnelMessage errorResponse = new TunnelMessage(
@@ -69,7 +72,7 @@ public class TunnelServerHandler extends ServerHandler {
                     errorMsg.getBytes(CharsetUtil.UTF_8)
                 );
                 ctx.writeAndFlush(Unpooled.copiedBuffer(errorResponse.toBytes()));
-                System.err.println("[TunnelServer] [Channel: " + channelId + "] " + errorMsg);
+                logger.error("[TunnelServer] [Channel: {}] {}", channelId, errorMsg);
             }
         } else {
             // Delegate to parent for standard actions (FORWARD, PING, EXIT, etc.)
