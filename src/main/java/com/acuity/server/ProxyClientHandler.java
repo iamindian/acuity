@@ -95,7 +95,7 @@ public class ProxyClientHandler extends ServerHandler {
             ", totalData=" + completeData.length + " bytes");
 
         // Forward to browser channel
-        forwardDataToBrowser(ctx, browserChannelId, completeData, channelId);
+        forwardDataToUserClient(ctx, browserChannelId, completeData, channelId);
     }
 
     @Override
@@ -112,13 +112,13 @@ public class ProxyClientHandler extends ServerHandler {
             return;
         }
 
-        forwardDataToBrowser(ctx, browserChannelId, data, channelId);
+        forwardDataToUserClient(ctx, browserChannelId, data, channelId);
     }
 
     /**
-     * Forward data to browser channel
+     * Forward data to user client channel
      */
-    private void forwardDataToBrowser(ChannelHandlerContext ctx, String browserChannelId, byte[] data, String channelId) {
+    private void forwardDataToUserClient(ChannelHandlerContext ctx, String browserChannelId, byte[] data, String channelId) {
         ChannelHandlerContext browserCtx = userClientContexts.get(browserChannelId);
         if (browserCtx == null || !browserCtx.channel().isActive()) {
             System.out.println("[TunnelServer] [Channel: " + channelId + "] Browser channel not active: " + browserChannelId);
