@@ -18,7 +18,7 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
     // Static maps shared across all handlers
     protected static final Map<String, Channel> pipedChannels = new ConcurrentHashMap<>();
     protected static final Map<String, ChannelHandlerContext> proxyClientContexts = new ConcurrentHashMap<>();
-    protected static final Map<String, ChannelHandlerContext> browserClientContexts = new ConcurrentHashMap<>();
+    protected static final Map<String, ChannelHandlerContext> userClientContexts = new ConcurrentHashMap<>();
 
     protected final Map<Integer, List<TunnelServerApp>> proxyClientInstances;
     protected final Map<Integer, TunnelServerApp> userClientInstances;
@@ -142,7 +142,7 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         pipedChannels.entrySet().removeIf(entry -> entry.getValue().id().equals(ctx.channel().id()));
 
         proxyClientContexts.remove(channelId);
-        browserClientContexts.remove(channelId);
+        userClientContexts.remove(channelId);
 
         System.out.println("[TunnelServer] [Channel: " + channelId + "] Client disconnected: " + ctx.channel().remoteAddress());
     }
@@ -151,7 +151,7 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         return new ConcurrentHashMap<>(proxyClientContexts);
     }
 
-    public static Map<String, ChannelHandlerContext> getBrowserClientContexts() {
-        return new ConcurrentHashMap<>(browserClientContexts);
+    public static Map<String, ChannelHandlerContext> getUserClientContexts() {
+        return new ConcurrentHashMap<>(userClientContexts);
     }
 }

@@ -119,7 +119,7 @@ public class ProxyClientHandler extends ServerHandler {
      * Forward data to browser channel
      */
     private void forwardDataToBrowser(ChannelHandlerContext ctx, String browserChannelId, byte[] data, String channelId) {
-        ChannelHandlerContext browserCtx = browserClientContexts.get(browserChannelId);
+        ChannelHandlerContext browserCtx = userClientContexts.get(browserChannelId);
         if (browserCtx == null || !browserCtx.channel().isActive()) {
             System.out.println("[TunnelServer] [Channel: " + channelId + "] Browser channel not active: " + browserChannelId);
             return;

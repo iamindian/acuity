@@ -28,7 +28,7 @@ public class UserClientHandler extends ServerHandler {
     @Override
     public void channelActive(ChannelHandlerContext ctx) {
         String channelId = ctx.channel().id().asShortText();
-        browserClientContexts.put(channelId, ctx);
+        userClientContexts.put(channelId, ctx);
         System.out.println("[TunnelServer] [Channel: " + channelId + "] User client connected: " + ctx.channel().remoteAddress());
     }
 
