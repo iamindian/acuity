@@ -1,5 +1,8 @@
 package com.acuity.test;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -10,6 +13,7 @@ import java.net.Socket;
  * Simple TCP client that sends PING messages and receives PONG responses
  */
 public class TestTcpClient {
+    private static final Logger logger = LoggerFactory.getLogger(TestTcpClient.class);
     private final String host;
     private final int port;
 
@@ -20,24 +24,24 @@ public class TestTcpClient {
 
     public void connect() throws IOException {
         try (Socket socket = new Socket(host, port)) {
-            System.out.println("Connected to server at " + host + ":" + port);
+            logger.info("[TestTcpClient] Connected to server at {}:{}", host, port);
 
             PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 
             // Send PING message
             String pingMessage = "PING";
-            System.out.println("Sending: " + pingMessage);
+            logger.info("[TestTcpClient] Sending: {}", pingMessage);
             out.println(pingMessage);
 
             // Receive PONG response
             String response = in.readLine();
-            System.out.println("Received: " + response);
+            logger.info("[TestTcpClient] Received: {}", response);
 
             if ("PONG".equals(response)) {
-                System.out.println("Successfully received PONG response!");
+                logger.info("[TestTcpClient] Successfully received PONG response!");
             } else {
-                System.out.println("Unexpected response: " + response);
+                logger.warn("[TestTcpClient] Unexpected response: {}", response);
             }
         }
     }

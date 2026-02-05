@@ -1,5 +1,8 @@
 package com.acuity.test;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -11,6 +14,7 @@ import java.net.Socket;
  * Simple TCP server that responds to PING with PONG
  */
 public class TestTcpServer {
+    private static final Logger logger = LoggerFactory.getLogger(TestTcpServer.class);
     private final int port;
 
     public TestTcpServer(int port) {
@@ -19,33 +23,33 @@ public class TestTcpServer {
 
     public void start() throws IOException {
         try (ServerSocket serverSocket = new ServerSocket(port)) {
-            System.out.println("Test TCP Server started on port " + port);
-            System.out.println("Waiting for client connections...");
+            logger.info("[TestTcpServer] Test TCP Server started on port {}", port);
+            logger.info("[TestTcpServer] Waiting for client connections...");
 
             while (true) {
                 try (Socket clientSocket = serverSocket.accept()) {
                     String clientAddress = clientSocket.getInetAddress().getHostAddress();
                     int clientPort = clientSocket.getPort();
-                    System.out.println("Client connected from " + clientAddress + ":" + clientPort);
+                    logger.info("[TestTcpServer] Client connected from {}:{}", clientAddress, clientPort);
 
                     // Read from client
                     BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
                     PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true);
 
                     String message = in.readLine();
-                    System.out.println("Received: " + message);
+                    logger.info("[TestTcpServer] Received: {}", message);
 
                     if ("PING".equals(message)) {
                         String pongResponse = "PONG";
-                        System.out.println("Sending: " + pongResponse);
+                        logger.info("[TestTcpServer] Sending: {}", pongResponse);
                         out.println(pongResponse);
                     } else {
-                        System.out.println("Unexpected message: " + message);
+                        logger.warn("[TestTcpServer] Unexpected message: {}", message);
                     }
 
-                    System.out.println("Client disconnected");
+                    logger.info("[TestTcpServer] Client disconnected");
                 } catch (IOException e) {
-                    System.err.println("Error handling client: " + e.getMessage());
+                    logger.error("[TestTcpServer] Error handling client", e);
                 }
             }
         }

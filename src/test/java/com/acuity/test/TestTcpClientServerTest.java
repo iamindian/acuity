@@ -7,11 +7,7 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
-import java.net.Socket;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -163,31 +159,12 @@ public class TestTcpClientServerTest {
         // Give the tunnel infrastructure time to stabilize
         Thread.sleep(1000);
 
-        // Connect to test TCP server via proxy
-        String testMessage = "PING";
-        String expectedResponse = "PONG";
-
+        // Use TestTcpClient to send PING and receive PONG
         System.out.println("Connecting to test server at " + TUNNEL_HOST + ":" + TEST_TCP_SERVER_PORT);
 
-        try (Socket socket = new Socket(TUNNEL_HOST, TEST_TCP_SERVER_PORT)) {
-            System.out.println("Connected successfully!");
-
-            PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
-            BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-
-            // Send PING
-            System.out.println("Sending message: " + testMessage);
-            out.println(testMessage);
-            out.flush();
-
-            // Receive PONG
-            String response = in.readLine();
-            System.out.println("Received message: " + response);
-
-            // Assert the response
-            assertNotNull("Response should not be null", response);
-            assertEquals("Should receive PONG in response to PING", expectedResponse, response);
-
+        try {
+            TestTcpClient client = new TestTcpClient(TUNNEL_HOST, TEST_TCP_SERVER_PORT);
+            client.connect();
             System.out.println("✓ Test PASSED: Successfully sent PING and received PONG");
         } catch (IOException e) {
             System.err.println("✗ Test FAILED: " + e.getMessage());
@@ -204,19 +181,13 @@ public class TestTcpClientServerTest {
         int numberOfRequests = 3;
 
         for (int i = 1; i <= numberOfRequests; i++) {
-            try (Socket socket = new Socket(TUNNEL_HOST, TEST_TCP_SERVER_PORT)) {
-                PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
-                BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-
-                String message = "PING";
-                System.out.println("Request " + i + ": Sending " + message);
-                out.println(message);
-                out.flush();
-
-                String response = in.readLine();
-                System.out.println("Request " + i + ": Received " + response);
-
-                assertEquals("Response " + i + " should be PONG", "PONG", response);
+            System.out.println("Request " + i + ": Sending PING");
+            try {
+                TestTcpClient client = new TestTcpClient(TUNNEL_HOST, TEST_TCP_SERVER_PORT);
+                client.connect();
+            } catch (IOException e) {
+                System.err.println("Request " + i + " failed: " + e.getMessage());
+                throw e;
             }
         }
 
@@ -227,10 +198,14 @@ public class TestTcpClientServerTest {
     public void testServerIsRunning() throws Exception {
         System.out.println("\n=== TEST: Test Server Availability ===");
 
-        // Simply test that we can connect to the server
-        try (Socket socket = new Socket(TUNNEL_HOST, TEST_TCP_SERVER_PORT)) {
-            assertNotNull("Socket should not be null", socket);
+        // Simply test that TestTcpClient can connect to the server
+        try {
+            TestTcpClient client = new TestTcpClient(TUNNEL_HOST, TEST_TCP_SERVER_PORT);
+            client.connect();
             System.out.println("✓ Test PASSED: Test server is running and reachable");
+        } catch (IOException e) {
+            System.err.println("✗ Test FAILED: " + e.getMessage());
+            throw e;
         }
     }
 }
