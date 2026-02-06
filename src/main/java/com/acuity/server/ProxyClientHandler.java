@@ -28,6 +28,36 @@ public class ProxyClientHandler extends ServerHandler {
     }
 
     @Override
+    public void channelInactive(ChannelHandlerContext ctx) {
+        String proxyChannelId = ctx.channel().id().asShortText();
+
+        // Clean up any orphaned streaming sessions for inactive user channels
+        cleanupOrphanedSessions();
+
+        // Call parent cleanup
+        super.channelInactive(ctx);
+
+        System.out.println("[TunnelServer] [Channel: " + proxyChannelId + "] Proxy client disconnected");
+    }
+
+    /**
+     * Clean up streaming sessions for inactive user channels
+     */
+    private void cleanupOrphanedSessions() {
+        streamingSessions.entrySet().removeIf(entry -> {
+            String userChannelId = entry.getKey();
+            ChannelHandlerContext userCtx = userClientContexts.get(userChannelId);
+
+            // Remove if user channel is null or inactive
+            if (userCtx == null || !userCtx.channel().isActive()) {
+                System.out.println("[TunnelServer] Cleaning up orphaned streaming session for inactive user channel: " + userChannelId);
+                return true;
+            }
+            return false;
+        });
+    }
+
+    @Override
     protected void handleTunnelMessage(ChannelHandlerContext ctx, TunnelMessage tunnelMessage, String proxyChannelId) {
         TunnelAction action = tunnelMessage.getAction();
         String userChannelId = tunnelMessage.getUserChannelId();
@@ -55,6 +85,19 @@ public class ProxyClientHandler extends ServerHandler {
         long totalSize = Long.parseLong(new String(data, StandardCharsets.UTF_8));
 
         System.out.println("[TunnelServer] [Channel: " + proxyChannelId + "] Stream START: userChannel=" + userChannelId + ", totalSize=" + totalSize + " bytes");
+
+        // Check if user channel is still active
+        ChannelHandlerContext userCtx = userClientContexts.get(userChannelId);
+        if (userCtx == null || !userCtx.channel().isActive()) {
+            System.err.println("[TunnelServer] [Channel: " + proxyChannelId + "] ERROR: User channel " + userChannelId + " is not active, cannot start stream");
+            return;
+        }
+
+        // Clean up any existing session for this user channel (prevents orphans)
+        StreamingSession existingSession = streamingSessions.get(userChannelId);
+        if (existingSession != null) {
+            System.out.println("[TunnelServer] [Channel: " + proxyChannelId + "] WARNING: Replacing existing streaming session for userChannel=" + userChannelId);
+        }
 
         // Create streaming session
         StreamingSession session = new StreamingSession(userChannelId, totalSize);
