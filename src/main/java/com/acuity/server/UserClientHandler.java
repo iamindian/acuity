@@ -30,6 +30,19 @@ public class UserClientHandler extends ServerHandler {
     }
 
     @Override
+    public void channelInactive(ChannelHandlerContext ctx) {
+        String userChannelId = ctx.channel().id().asShortText();
+
+        // Clean up any streaming session for this user channel immediately
+        ProxyClientHandler.cleanupSessionForUser(userChannelId);
+
+        // Call parent cleanup (removes from userClientContexts)
+        super.channelInactive(ctx);
+
+        System.out.println("[TunnelServer] [Channel: " + userChannelId + "] User client disconnected");
+    }
+
+    @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
         ByteBuf byteBuf = (ByteBuf) msg;
         byte[] data = new byte[byteBuf.readableBytes()];

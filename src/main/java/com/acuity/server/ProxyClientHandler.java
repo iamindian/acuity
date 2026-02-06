@@ -42,8 +42,9 @@ public class ProxyClientHandler extends ServerHandler {
 
     /**
      * Clean up streaming sessions for inactive user channels
+     * This method is public static so it can be called from UserClientHandler when a user disconnects
      */
-    private void cleanupOrphanedSessions() {
+    public static void cleanupOrphanedSessions() {
         streamingSessions.entrySet().removeIf(entry -> {
             String userChannelId = entry.getKey();
             ChannelHandlerContext userCtx = userClientContexts.get(userChannelId);
@@ -55,6 +56,17 @@ public class ProxyClientHandler extends ServerHandler {
             }
             return false;
         });
+    }
+
+    /**
+     * Clean up streaming session for a specific user channel when it becomes inactive
+     * @param userChannelId The user channel ID that became inactive
+     */
+    public static void cleanupSessionForUser(String userChannelId) {
+        StreamingSession removed = streamingSessions.remove(userChannelId);
+        if (removed != null) {
+            System.out.println("[TunnelServer] Cleaned up streaming session for disconnected user channel: " + userChannelId);
+        }
     }
 
     @Override
