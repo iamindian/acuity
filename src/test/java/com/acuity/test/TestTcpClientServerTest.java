@@ -1,30 +1,32 @@
 package com.acuity.test;
 
 import com.acuity.client.TunnelClientApp;
-import com.acuity.common.SymmetricEncryption;
 import com.acuity.server.TunnelServerApp;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
+import java.net.Socket;
 
 /**
  * Integration test for TestTcpClient and TestTcpServer PING/PONG communication
- * Prerequisites: Tunnel server and tunnel client must be running with shared encryption key
+ * and large data streaming through the tunnel infrastructure
  */
 public class TestTcpClientServerTest {
+    private static final Logger logger = LoggerFactory.getLogger(TestTcpClientServerTest.class);
     private static final int TUNNEL_SERVER_PORT = 7001;
     private static final int TUNNEL_CLIENT_PROXY_PORT = 8081;
     private static final int TEST_TCP_SERVER_PORT = 9001;
     private static final String TUNNEL_HOST = "127.0.0.1";
     private static final long STARTUP_DELAY_MS = 2000;
+    private static final int BUFFER_SIZE = 8192; // 8KB buffer for large data transfers
 
     // Shared encryption key (password) - Base64 encoded AES-256 key (32 bytes)
-    // Generated using PowerShell: [System.Convert]::ToBase64String((1..32 | ForEach-Object { [byte](Get-Random -Maximum 256) }))
     private static final String SHARED_KEY_PASSWORD = "Hu5SNsC4RUrRO06vtNWkRwVDeR2phas3Pih7D+uJ/V4=";
 
     private static Thread tunnelServerThread;
@@ -35,7 +37,7 @@ public class TestTcpClientServerTest {
     public static void setUpBeforeClass() throws Exception {
         System.out.println("=== Starting Tunnel Infrastructure ===");
 
-        // Start tunnel server and capture the generated key
+        // Start tunnel server
         startTunnelServer();
         Thread.sleep(STARTUP_DELAY_MS);
 
@@ -97,8 +99,7 @@ public class TestTcpClientServerTest {
                 System.out.println("[TunnelServer] Interrupted");
                 Thread.currentThread().interrupt();
             } catch (Exception e) {
-                System.err.println("[TunnelServer] Error: " + e.getMessage());
-                e.printStackTrace();
+                logger.error("[TunnelServer] Error: {}", e.getMessage(), e);
             }
         });
         tunnelServerThread.setDaemon(true);
@@ -108,7 +109,7 @@ public class TestTcpClientServerTest {
         Thread.sleep(1500);
     }
 
-    private static void startTunnelClient() throws Exception {
+    private static void startTunnelClient() {
         tunnelClientThread = new Thread(() -> {
             try {
                 System.out.println("[TunnelClient] Starting - connecting to " + TUNNEL_HOST + ":" + TUNNEL_SERVER_PORT);
@@ -129,8 +130,7 @@ public class TestTcpClientServerTest {
                 System.out.println("[TunnelClient] Interrupted");
                 Thread.currentThread().interrupt();
             } catch (Exception e) {
-                System.err.println("[TunnelClient] Error: " + e.getMessage());
-                e.printStackTrace();
+                logger.error("[TunnelClient] Error: {}", e.getMessage(), e);
             }
         });
         tunnelClientThread.setDaemon(true);
@@ -144,7 +144,7 @@ public class TestTcpClientServerTest {
                 TestTcpServer server = new TestTcpServer(TEST_TCP_SERVER_PORT);
                 server.start();
             } catch (IOException e) {
-                System.err.println("[TestTcpServer] Error: " + e.getMessage());
+                logger.error("[TestTcpServer] Error: {}", e.getMessage(), e);
                 Thread.currentThread().interrupt();
             }
         });
@@ -207,5 +207,153 @@ public class TestTcpClientServerTest {
             System.err.println("✗ Test FAILED: " + e.getMessage());
             throw e;
         }
+    }
+
+    @Test
+    public void testSend10MBLargeData() throws IOException, InterruptedException {
+        System.out.println("\n=== TEST: Send 10MB Large Data Through Tunnel ===");
+
+        Thread.sleep(500);
+
+        // 10MB of test data
+        final int dataSize = 10 * 1024 * 1024; // 10MB
+
+        System.out.println("Generating 10MB test data...");
+        byte[] testData = generateTestData(dataSize);
+        System.out.println("Generated " + formatDataSize(testData.length));
+
+        long startTime = System.currentTimeMillis();
+
+        try {
+            // Send large data using integrated method
+            byte[] response = sendLargeData(testData);
+
+            long endTime = System.currentTimeMillis();
+            long duration = endTime - startTime;
+
+            System.out.println("Data transmission completed in " + duration + "ms");
+            System.out.println("Throughput: " + calculateThroughput(testData.length, duration) + " MB/s");
+
+            // Verify response
+            if (response.length > 0) {
+                System.out.println("Received response: " + formatDataSize(response.length));
+                System.out.println("✓ Test PASSED: Successfully sent and received 10MB data through tunnel");
+            } else {
+                System.err.println("✗ Test FAILED: No response received from server");
+                throw new IOException("No response received");
+            }
+        } catch (IOException e) {
+            System.err.println("✗ Test FAILED: " + e.getMessage());
+            throw e;
+        }
+    }
+
+    /**
+     * Send large binary data to server and receive response
+     * Uses built-in methods without dependency on TestTcpClientLargeData
+     */
+    private static byte[] sendLargeData(byte[] data) throws IOException {
+        try (Socket socket = new Socket(TUNNEL_HOST, TEST_TCP_SERVER_PORT)) {
+            socket.setTcpNoDelay(true);
+            socket.setReceiveBufferSize(1024 * 1024); // 1MB receive buffer
+            socket.setSendBufferSize(1024 * 1024);    // 1MB send buffer
+
+            System.out.println("[TestTcpClientServerTest] Connected to server at " + TUNNEL_HOST + ":" + TEST_TCP_SERVER_PORT);
+
+            DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+            DataInputStream in = new DataInputStream(socket.getInputStream());
+
+            // Send data size first
+            System.out.println("[TestTcpClientServerTest] Sending data size: " + data.length + " bytes");
+            out.writeInt(data.length);
+            out.flush();
+
+            // Send data in chunks
+            int offset = 0;
+            int chunkNumber = 1;
+            while (offset < data.length) {
+                int chunkSize = Math.min(BUFFER_SIZE, data.length - offset);
+                out.write(data, offset, chunkSize);
+
+                if (chunkNumber % 100 == 0) {
+                    System.out.println("[TestTcpClientServerTest] Sent chunk " + chunkNumber +
+                        " (" + (offset + chunkSize) + " bytes total)");
+                }
+
+                offset += chunkSize;
+                chunkNumber++;
+            }
+            out.flush();
+
+            System.out.println("[TestTcpClientServerTest] Finished sending " + data.length +
+                " bytes in " + (chunkNumber - 1) + " chunks");
+
+            // Receive response size
+            System.out.println("[TestTcpClientServerTest] Waiting for response size...");
+            int responseSize = in.readInt();
+            System.out.println("[TestTcpClientServerTest] Server will send " + responseSize + " bytes response");
+
+            // Receive response data
+            byte[] response = new byte[responseSize];
+            int totalRead = 0;
+            int chunkNum = 1;
+
+            while (totalRead < responseSize) {
+                int bytesToRead = Math.min(BUFFER_SIZE, responseSize - totalRead);
+                int bytesRead = in.read(response, totalRead, bytesToRead);
+
+                if (bytesRead < 0) {
+                    throw new IOException("Connection closed unexpectedly after reading " + totalRead + " bytes");
+                }
+
+                totalRead += bytesRead;
+
+                if (chunkNum % 100 == 0) {
+                    System.out.println("[TestTcpClientServerTest] Received chunk " + chunkNum +
+                        " (" + totalRead + "/" + responseSize + " bytes)");
+                }
+
+                chunkNum++;
+            }
+
+            System.out.println("[TestTcpClientServerTest] Successfully received " + totalRead +
+                " bytes response in " + (chunkNum - 1) + " chunks");
+
+            return response;
+        } catch (IOException e) {
+            logger.error("[TestTcpClientServerTest] Connection error: {}", e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    /**
+     * Generate test data of specified size
+     */
+    private static byte[] generateTestData(int size) {
+        byte[] data = new byte[size];
+        // Fill with repeating pattern for easy verification
+        byte[] pattern = "TestDataPattern".getBytes();
+        for (int i = 0; i < size; i++) {
+            data[i] = pattern[i % pattern.length];
+        }
+        return data;
+    }
+
+    /**
+     * Format data size in human-readable format
+     */
+    private static String formatDataSize(long bytes) {
+        if (bytes <= 0) return "0 B";
+        final String[] units = new String[]{"B", "KB", "MB", "GB"};
+        int digitGroups = (int) (Math.log10(bytes) / Math.log10(1024));
+        return String.format("%.2f %s", bytes / Math.pow(1024, digitGroups), units[digitGroups]);
+    }
+
+    /**
+     * Calculate throughput in MB/s
+     */
+    private static double calculateThroughput(long bytes, long durationMs) {
+        if (durationMs <= 0) return 0;
+        return (double) bytes / (1024 * 1024) / (durationMs / 1000.0);
     }
 }

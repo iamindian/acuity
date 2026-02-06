@@ -60,6 +60,22 @@ java -cp target\tunnel-1.0-SNAPSHOT.jar com.acuity.client.TunnelClientApp client
 
 See `server-config.toml` and `client-config.toml` in the project root for configuration examples.
 
+### Bash Script
+
+Use `start.sh` to run the server, client, or both:
+
+```bash
+./start.sh server
+./start.sh client
+./start.sh both
+```
+
+Override config paths:
+
+```bash
+SERVER_CONFIG=server-config.toml CLIENT_CONFIG=client-config.toml ./start.sh both
+```
+
 ### Arguments
 
 **Server (Command Line Mode)**: `java -cp target\tunnel-1.0-SNAPSHOT.jar com.acuity.server.TunnelServerApp [port] [sharedKey]`
@@ -86,4 +102,4 @@ See `server-config.toml` and `client-config.toml` in the project root for config
 - **Important**: The client and server must use the same encryption key. Either:
   - Let the server generate a key and copy it to the client, OR
   - Provide the same key to both server and client via command line arguments
-- For production use, store the encryption key securely (e.g., environment variables, secrets manager) instead of passing it on the command line.
+- For production use, store the encryption key securely (e.g., environment variables, secrets manager) instead of passing it on the command line

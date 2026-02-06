@@ -58,7 +58,7 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
 
     protected void handleTunnelMessage(ChannelHandlerContext ctx, TunnelMessage tunnelMessage, String channelId) {
         // Default implementation - subclasses can override
-        String action = tunnelMessage.getAction();
+        TunnelAction action = tunnelMessage.getAction();
 
         if (action == null) {
             System.out.println("[TunnelServer] [Channel: " + channelId + "] Received message with null action");
@@ -66,13 +66,13 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         }
 
         switch (action) {
-            case "FORWARD":
+            case FORWARD:
                 handleForwardAction(ctx, tunnelMessage, channelId);
                 break;
-            case "PING":
+            case PING:
                 handlePingAction(ctx, tunnelMessage, channelId);
                 break;
-            case "EXIT":
+            case EXIT:
                 handleExitAction(ctx, tunnelMessage, channelId);
                 break;
             default:
@@ -91,7 +91,7 @@ public class ServerHandler extends ChannelInboundHandlerAdapter {
         // Send PONG response
         TunnelMessage pong = new TunnelMessage(
             tunnelMessage.getUserChannelId(),
-            "PONG",
+            TunnelAction.PONG,
             new byte[0]
         );
         ctx.writeAndFlush(Unpooled.copiedBuffer(pong.toBytes()));

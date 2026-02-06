@@ -26,7 +26,7 @@ public class TunnelServerApp {
     public enum ClientType {
         SERVER,
         PROXY,
-        BROWSER
+        USER
     }
 
     private static final Map<Integer, List<TunnelServerApp>> proxyClientInstances = new HashMap<>();
@@ -47,7 +47,7 @@ public class TunnelServerApp {
         this.sharedKey = sharedKey;
         if (clientType == ClientType.PROXY) {
             proxyClientInstances.computeIfAbsent(port, k -> new ArrayList<>()).add(this);
-        } else if (clientType == ClientType.BROWSER) {
+        } else if (clientType == ClientType.USER) {
             userClientInstances.put(port, this);
         } else {
             serverInstances.put(port, this);
@@ -63,7 +63,7 @@ public class TunnelServerApp {
         return new ArrayList<>(proxyClientInstances.getOrDefault(port, new ArrayList<>()));
     }
 
-    public static TunnelServerApp getBrowserClientInstance(int port) {
+    public static TunnelServerApp getUserClientInstance(int port) {
         return userClientInstances.get(port);
     }
 
@@ -116,7 +116,7 @@ public class TunnelServerApp {
 
                             if (clientType == ClientType.PROXY) {
                                 ch.pipeline().addLast(new ProxyClientHandler(proxyClientInstances));
-                            } else if (clientType == ClientType.BROWSER) {
+                            } else if (clientType == ClientType.USER) {
                                 ch.pipeline().addLast(new UserClientHandler(userClientInstances));
                             } else {
                                 ch.pipeline().addLast(new TunnelServerHandler(proxyClientInstances, userClientInstances, serverInstances));

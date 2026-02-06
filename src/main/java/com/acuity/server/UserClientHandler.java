@@ -17,9 +17,6 @@ public class UserClientHandler extends ServerHandler {
 
     // Streaming configuration
     private static final int CHUNK_SIZE = 8192; // 8KB chunks for streaming
-    private static final String STREAM_START_ACTION = "STREAM_START";
-    private static final String STREAM_DATA_ACTION = "STREAM_DATA";
-    private static final String STREAM_END_ACTION = "STREAM_END";
 
     public UserClientHandler(Map<Integer, TunnelServerApp> userClientInstances) {
         super(null, userClientInstances, null);
@@ -37,13 +34,13 @@ public class UserClientHandler extends ServerHandler {
         ByteBuf byteBuf = (ByteBuf) msg;
         byte[] data = new byte[byteBuf.readableBytes()];
         byteBuf.readBytes(data);
-        String browserChannelId = ctx.channel().id().asShortText();
+        String userChannelId = ctx.channel().id().asShortText();
 
         // Get all available proxy client contexts
         List<String> proxyChannelIds = new ArrayList<>(proxyClientContexts.keySet());
 
         if (proxyChannelIds.isEmpty()) {
-            System.out.println("[TunnelServer] [Channel: " + browserChannelId + "] No proxy channels available");
+            System.out.println("[TunnelServer] [Channel: " + userChannelId + "] No proxy channels available");
             ctx.writeAndFlush(Unpooled.copiedBuffer("Error: No proxy channels available\n", CharsetUtil.UTF_8));
             byteBuf.release();
             return;
@@ -54,14 +51,14 @@ public class UserClientHandler extends ServerHandler {
         ChannelHandlerContext proxyCtx = proxyClientContexts.get(selectedProxyChannelId);
 
         if (proxyCtx == null || !proxyCtx.channel().isActive()) {
-            System.out.println("[TunnelServer] [Channel: " + browserChannelId + "] Selected proxy channel is not active");
+            System.out.println("[TunnelServer] [Channel: " + userChannelId + "] Selected proxy channel is not active");
             ctx.writeAndFlush(Unpooled.copiedBuffer("Error: Proxy channel not active\n", CharsetUtil.UTF_8));
             byteBuf.release();
             return;
         }
 
         // Stream the data in chunks if it's large
-        streamDataToProxy(browserChannelId, data, proxyCtx);
+        streamDataToProxy(userChannelId, data, proxyCtx);
 
         byteBuf.release();
     }
@@ -70,20 +67,20 @@ public class UserClientHandler extends ServerHandler {
      * Stream data from user client to proxy client in chunks
      * Sends STREAM_START, followed by STREAM_DATA chunks, then STREAM_END
      */
-    private void streamDataToProxy(String browserChannelId, byte[] data, ChannelHandlerContext proxyCtx) {
+    private void streamDataToProxy(String userChannelId, byte[] data, ChannelHandlerContext proxyCtx) {
         if (data.length <= CHUNK_SIZE) {
             // Small data: send as single FORWARD message
-            System.out.println("[TunnelServer] [Channel: " + browserChannelId + "] Sending small message (" + data.length + " bytes) to proxy");
-            TunnelMessage tunnelMessage = new TunnelMessage(browserChannelId, "FORWARD", data);
+            System.out.println("[TunnelServer] [Channel: " + userChannelId + "] Sending small message (" + data.length + " bytes) to proxy");
+            TunnelMessage tunnelMessage = new TunnelMessage(userChannelId, TunnelAction.FORWARD, data);
             byte[] serializedMessage = tunnelMessage.toBytes();
             proxyCtx.write(Unpooled.copiedBuffer(serializedMessage));
             proxyCtx.flush();
         } else {
             // Large data: stream in chunks
-            System.out.println("[TunnelServer] [Channel: " + browserChannelId + "] Streaming large message (" + data.length + " bytes) to proxy in " + CHUNK_SIZE + " byte chunks");
+            System.out.println("[TunnelServer] [Channel: " + userChannelId + "] Streaming large message (" + data.length + " bytes) to proxy in " + CHUNK_SIZE + " byte chunks");
 
             // Send STREAM_START message
-            TunnelMessage startMessage = new TunnelMessage(browserChannelId, STREAM_START_ACTION,
+            TunnelMessage startMessage = new TunnelMessage(userChannelId, TunnelAction.STREAM_START,
                 String.valueOf(data.length).getBytes(CharsetUtil.UTF_8));
             proxyCtx.write(Unpooled.copiedBuffer(startMessage.toBytes()));
 
@@ -95,10 +92,10 @@ public class UserClientHandler extends ServerHandler {
                 byte[] chunk = new byte[chunkLength];
                 System.arraycopy(data, offset, chunk, 0, chunkLength);
 
-                TunnelMessage chunkMessage = new TunnelMessage(browserChannelId, STREAM_DATA_ACTION, chunk);
+                TunnelMessage chunkMessage = new TunnelMessage(userChannelId, TunnelAction.STREAM_DATA, chunk);
                 proxyCtx.write(Unpooled.copiedBuffer(chunkMessage.toBytes()));
 
-                System.out.println("[TunnelServer] [Channel: " + browserChannelId + "] Sent chunk " + chunkNumber +
+                System.out.println("[TunnelServer] [Channel: " + userChannelId + "] Sent chunk " + chunkNumber +
                     " (" + chunkLength + " bytes, offset: " + offset + ")");
 
                 offset += chunkLength;
@@ -106,11 +103,11 @@ public class UserClientHandler extends ServerHandler {
             }
 
             // Send STREAM_END message
-            TunnelMessage endMessage = new TunnelMessage(browserChannelId, STREAM_END_ACTION, new byte[0]);
+            TunnelMessage endMessage = new TunnelMessage(userChannelId, TunnelAction.STREAM_END, new byte[0]);
             proxyCtx.write(Unpooled.copiedBuffer(endMessage.toBytes()));
             proxyCtx.flush();
 
-            System.out.println("[TunnelServer] [Channel: " + browserChannelId + "] Stream completed: " +
+            System.out.println("[TunnelServer] [Channel: " + userChannelId + "] Stream completed: " +
                 (chunkNumber - 1) + " chunks sent");
         }
     }

@@ -21,24 +21,24 @@ public class TunnelServerHandler extends ServerHandler {
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) {
-        String channelId = ctx.channel().id().asShortText();
-        logger.info("[TunnelServer] [Channel: {}] Tunnel server client connected: {}", channelId, ctx.channel().remoteAddress());
+        String serverChannelId = ctx.channel().id().asShortText();
+        logger.info("[TunnelServer] [Channel: {}] Tunnel server client connected: {}", serverChannelId, ctx.channel().remoteAddress());
     }
 
     @Override
-    protected void handleTunnelMessage(ChannelHandlerContext ctx, TunnelMessage tunnelMessage, String channelId) {
-        String action = tunnelMessage.getAction();
+    protected void handleTunnelMessage(ChannelHandlerContext ctx, TunnelMessage tunnelMessage, String serverChannelId) {
+        TunnelAction action = tunnelMessage.getAction();
 
         if (action == null) {
-            logger.warn("[TunnelServer] [Channel: {}] Received message with null action", channelId);
+            logger.warn("[TunnelServer] [Channel: {}] Received message with null action", serverChannelId);
             return;
         }
 
-        String actionUpper = action.toUpperCase();
         // Handle ADDPROXY action
-        if (actionUpper.startsWith("ADDPROXY:")) {
+        if (action == TunnelAction.ADDPROXY) {
             try {
-                String portStr = action.substring(action.indexOf(':') + 1).trim();
+                String rawAction = tunnelMessage.getRawAction();
+                String portStr = rawAction.substring(rawAction.indexOf(':') + 1).trim();
                 int proxyPort = Integer.parseInt(portStr);
 
                 TunnelServerApp newApp = new TunnelServerApp(proxyPort, TunnelServerApp.ClientType.PROXY);
@@ -58,25 +58,25 @@ public class TunnelServerHandler extends ServerHandler {
                 // Send response back
                 TunnelMessage responseMsg = new TunnelMessage(
                     tunnelMessage.getUserChannelId(),
-                    "RESPONSE",
+                    TunnelAction.RESPONSE,
                     response.getBytes(CharsetUtil.UTF_8)
                 );
                 ctx.writeAndFlush(Unpooled.copiedBuffer(responseMsg.toBytes()));
 
-                logger.info("[TunnelServer] [Channel: {}] {}", channelId, response);
+                logger.info("[TunnelServer] [Channel: {}] {}", serverChannelId, response);
             } catch (NumberFormatException e) {
-                String errorMsg = "Invalid port number in proxy command: " + action;
+                String errorMsg = "Invalid port number in proxy command: " + tunnelMessage.getRawAction();
                 TunnelMessage errorResponse = new TunnelMessage(
                     tunnelMessage.getUserChannelId(),
-                    "ERROR",
+                    TunnelAction.ERROR,
                     errorMsg.getBytes(CharsetUtil.UTF_8)
                 );
                 ctx.writeAndFlush(Unpooled.copiedBuffer(errorResponse.toBytes()));
-                logger.error("[TunnelServer] [Channel: {}] {}", channelId, errorMsg);
+                logger.error("[TunnelServer] [Channel: {}] {}", serverChannelId, errorMsg);
             }
         } else {
             // Delegate to parent for standard actions (FORWARD, PING, EXIT, etc.)
-            super.handleTunnelMessage(ctx, tunnelMessage, channelId);
+            super.handleTunnelMessage(ctx, tunnelMessage, serverChannelId);
         }
     }
 }

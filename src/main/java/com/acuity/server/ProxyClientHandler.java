@@ -13,7 +13,7 @@ import java.util.Map;
  */
 public class ProxyClientHandler extends ServerHandler {
 
-    // Track streaming sessions: browserChannelId -> ByteBuffer for reassembling chunks
+    // Track streaming sessions: userChannelId -> ByteBuffer for reassembling chunks
     private static final Map<String, StreamingSession> streamingSessions = new HashMap<>();
 
     public ProxyClientHandler(Map<Integer, List<TunnelServerApp>> proxyClientInstances) {
@@ -22,124 +22,124 @@ public class ProxyClientHandler extends ServerHandler {
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) {
-        String channelId = ctx.channel().id().asShortText();
-        proxyClientContexts.put(channelId, ctx);
-        System.out.println("[TunnelServer] [Channel: " + channelId + "] Proxy client connected: " + ctx.channel().remoteAddress());
+        String proxyChannelId = ctx.channel().id().asShortText();
+        proxyClientContexts.put(proxyChannelId, ctx);
+        System.out.println("[TunnelServer] [Channel: " + proxyChannelId + "] Proxy client connected: " + ctx.channel().remoteAddress());
     }
 
     @Override
-    protected void handleTunnelMessage(ChannelHandlerContext ctx, TunnelMessage tunnelMessage, String channelId) {
-        String action = tunnelMessage.getAction();
-        String browserChannelId = tunnelMessage.getUserChannelId();
+    protected void handleTunnelMessage(ChannelHandlerContext ctx, TunnelMessage tunnelMessage, String proxyChannelId) {
+        TunnelAction action = tunnelMessage.getAction();
+        String userChannelId = tunnelMessage.getUserChannelId();
 
         // Handle streaming-specific actions
-        if ("STREAM_START".equals(action)) {
-            handleStreamStart(ctx, tunnelMessage, channelId, browserChannelId);
-        } else if ("STREAM_DATA".equals(action)) {
-            handleStreamData(ctx, tunnelMessage, channelId, browserChannelId);
-        } else if ("STREAM_END".equals(action)) {
-            handleStreamEnd(ctx, tunnelMessage, channelId, browserChannelId);
-        } else if ("FORWARD".equals(action)) {
-            handleForwardAction(ctx, tunnelMessage, channelId);
+        if (action == TunnelAction.STREAM_START) {
+            handleStreamStart(ctx, tunnelMessage, proxyChannelId, userChannelId);
+        } else if (action == TunnelAction.STREAM_DATA) {
+            handleStreamData(ctx, tunnelMessage, proxyChannelId, userChannelId);
+        } else if (action == TunnelAction.STREAM_END) {
+            handleStreamEnd(ctx, tunnelMessage, proxyChannelId, userChannelId);
+        } else if (action == TunnelAction.FORWARD) {
+            handleForwardAction(ctx, tunnelMessage, proxyChannelId);
         } else {
             // Delegate to parent for other actions
-            super.handleTunnelMessage(ctx, tunnelMessage, channelId);
+            super.handleTunnelMessage(ctx, tunnelMessage, proxyChannelId);
         }
     }
 
     /**
      * Handle STREAM_START message - initialize streaming session
      */
-    private void handleStreamStart(ChannelHandlerContext ctx, TunnelMessage tunnelMessage, String channelId, String browserChannelId) {
+    private void handleStreamStart(ChannelHandlerContext ctx, TunnelMessage tunnelMessage, String proxyChannelId, String userChannelId) {
         byte[] data = tunnelMessage.getData();
         long totalSize = Long.parseLong(new String(data, StandardCharsets.UTF_8));
 
-        System.out.println("[TunnelServer] [Channel: " + channelId + "] Stream START: browserChannel=" + browserChannelId + ", totalSize=" + totalSize + " bytes");
+        System.out.println("[TunnelServer] [Channel: " + proxyChannelId + "] Stream START: userChannel=" + userChannelId + ", totalSize=" + totalSize + " bytes");
 
         // Create streaming session
-        StreamingSession session = new StreamingSession(browserChannelId, totalSize);
-        streamingSessions.put(browserChannelId, session);
+        StreamingSession session = new StreamingSession(userChannelId, totalSize);
+        streamingSessions.put(userChannelId, session);
     }
 
     /**
      * Handle STREAM_DATA message - accumulate chunk
      */
-    private void handleStreamData(ChannelHandlerContext ctx, TunnelMessage tunnelMessage, String channelId, String browserChannelId) {
+    private void handleStreamData(ChannelHandlerContext ctx, TunnelMessage tunnelMessage, String proxyChannelId, String userChannelId) {
         byte[] chunk = tunnelMessage.getData();
 
-        StreamingSession session = streamingSessions.get(browserChannelId);
+        StreamingSession session = streamingSessions.get(userChannelId);
         if (session == null) {
-            System.err.println("[TunnelServer] [Channel: " + channelId + "] ERROR: Received STREAM_DATA without STREAM_START for " + browserChannelId);
+            System.err.println("[TunnelServer] [Channel: " + proxyChannelId + "] ERROR: Received STREAM_DATA without STREAM_START for " + userChannelId);
             return;
         }
 
         session.addChunk(chunk);
-        System.out.println("[TunnelServer] [Channel: " + channelId + "] Stream DATA: browserChannel=" + browserChannelId + ", chunkSize=" + chunk.length + " bytes, accumulated=" + session.getAccumulatedSize() + "/" + session.getTotalSize());
+        System.out.println("[TunnelServer] [Channel: " + proxyChannelId + "] Stream DATA: userChannel=" + userChannelId + ", chunkSize=" + chunk.length + " bytes, accumulated=" + session.getAccumulatedSize() + "/" + session.getTotalSize());
     }
 
     /**
-     * Handle STREAM_END message - forward complete data to browser channel
+     * Handle STREAM_END message - forward complete data to user channel
      */
-    private void handleStreamEnd(ChannelHandlerContext ctx, TunnelMessage tunnelMessage, String channelId, String browserChannelId) {
-        StreamingSession session = streamingSessions.get(browserChannelId);
+    private void handleStreamEnd(ChannelHandlerContext ctx, TunnelMessage tunnelMessage, String proxyChannelId, String userChannelId) {
+        StreamingSession session = streamingSessions.get(userChannelId);
         if (session == null) {
-            System.err.println("[TunnelServer] [Channel: " + channelId + "] ERROR: Received STREAM_END without STREAM_START for " + browserChannelId);
+            System.err.println("[TunnelServer] [Channel: " + proxyChannelId + "] ERROR: Received STREAM_END without STREAM_START for " + userChannelId);
             return;
         }
 
         byte[] completeData = session.getCompleteData();
-        streamingSessions.remove(browserChannelId);
+        streamingSessions.remove(userChannelId);
 
-        System.out.println("[TunnelServer] [Channel: " + channelId + "] Stream END: browserChannel=" + browserChannelId + ", totalData=" + completeData.length + " bytes");
+        System.out.println("[TunnelServer] [Channel: " + proxyChannelId + "] Stream END: userChannel=" + userChannelId + ", totalData=" + completeData.length + " bytes");
 
-        // Forward to browser channel
-        forwardDataToUserClient(ctx, browserChannelId, completeData, channelId);
+        // Forward to user channel
+        forwardDataToUserClient(ctx, userChannelId, completeData, proxyChannelId);
     }
 
     @Override
-    protected void handleForwardAction(ChannelHandlerContext ctx, TunnelMessage tunnelMessage, String channelId) {
+    protected void handleForwardAction(ChannelHandlerContext ctx, TunnelMessage tunnelMessage, String proxyChannelId) {
         // Proxy receives FORWARD message and should forward data to the actual target
-        String browserChannelId = tunnelMessage.getUserChannelId();
+        String userChannelId = tunnelMessage.getUserChannelId();
         byte[] data = tunnelMessage.getData();
 
-        System.out.println("[TunnelServer] [Channel: " + channelId + "] Proxy forwarding data from browser channel: " + browserChannelId + ", data length: " + (data != null ? data.length : 0));
+        System.out.println("[TunnelServer] [Channel: " + proxyChannelId + "] Proxy forwarding data from user channel: " + userChannelId + ", data length: " + (data != null ? data.length : 0));
 
-        if (browserChannelId == null) {
-            System.out.println("[TunnelServer] [Channel: " + channelId + "] Missing browserChannelId; drop data");
+        if (userChannelId == null) {
+            System.out.println("[TunnelServer] [Channel: " + proxyChannelId + "] Missing userChannelId; drop data");
             return;
         }
 
-        forwardDataToUserClient(ctx, browserChannelId, data, channelId);
+        forwardDataToUserClient(ctx, userChannelId, data, proxyChannelId);
     }
 
     /**
      * Forward data to user client channel
      */
-    private void forwardDataToUserClient(ChannelHandlerContext ctx, String browserChannelId, byte[] data, String channelId) {
-        ChannelHandlerContext browserCtx = userClientContexts.get(browserChannelId);
-        if (browserCtx == null || !browserCtx.channel().isActive()) {
-            System.out.println("[TunnelServer] [Channel: " + channelId + "] Browser channel not active: " + browserChannelId);
+    private void forwardDataToUserClient(ChannelHandlerContext ctx, String userChannelId, byte[] data, String proxyChannelId) {
+        ChannelHandlerContext userCtx = userClientContexts.get(userChannelId);
+        if (userCtx == null || !userCtx.channel().isActive()) {
+            System.out.println("[TunnelServer] [Channel: " + proxyChannelId + "] User channel not active: " + userChannelId);
             return;
         }
 
         if (data == null || data.length == 0) {
-            System.out.println("[TunnelServer] [Channel: " + channelId + "] No data to forward to browser channel: " + browserChannelId);
+            System.out.println("[TunnelServer] [Channel: " + proxyChannelId + "] No data to forward to user channel: " + userChannelId);
             return;
         }
 
-        browserCtx.writeAndFlush(Unpooled.copiedBuffer(data));
+        userCtx.writeAndFlush(Unpooled.copiedBuffer(data));
     }
 
     /**
      * Inner class to track streaming session state
      */
     private static class StreamingSession {
-        private final String browserChannelId;
+        private final String userChannelId;
         private final long totalSize;
         private final ByteArrayBuilder buffer;
 
-        public StreamingSession(String browserChannelId, long totalSize) {
-            this.browserChannelId = browserChannelId;
+        public StreamingSession(String userChannelId, long totalSize) {
+            this.userChannelId = userChannelId;
             this.totalSize = totalSize;
             this.buffer = new ByteArrayBuilder((int) Math.min(totalSize, Integer.MAX_VALUE));
         }
