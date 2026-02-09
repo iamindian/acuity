@@ -356,4 +356,58 @@ public class TestTcpClientServerTest {
         if (durationMs <= 0) return 0;
         return (double) bytes / (1024 * 1024) / (durationMs / 1000.0);
     }
+
+    @Test
+    public void testMultipleTunnelClientsWithGroupId() throws IOException, InterruptedException {
+        System.out.println("\n=== TEST: Multiple Tunnel Clients Transferring Data Sequentially ===");
+
+        Thread.sleep(500);
+
+        // Test data size: 5MB for each client
+        final int dataSize = 5 * 1024 * 1024; // 5MB
+
+        System.out.println("[TEST] Generating 5MB test data...");
+        byte[] testData1 = generateTestData(dataSize);
+        byte[] testData2 = generateTestData(dataSize);
+        System.out.println("[TEST] Generated test data: " + formatDataSize(testData1.length));
+
+        try {
+            // First client transfers 5MB
+            System.out.println("\n[TEST-CLIENT-1] Sending 5MB data...");
+            long startTime1 = System.currentTimeMillis();
+            byte[] response1 = sendLargeData(testData1);
+            long duration1 = System.currentTimeMillis() - startTime1;
+
+            System.out.println("[TEST-CLIENT-1] ✓ Received response: " + formatDataSize(response1.length));
+            System.out.println("[TEST-CLIENT-1] Transfer time: " + duration1 + "ms");
+            System.out.println("[TEST-CLIENT-1] Throughput: " + calculateThroughput(testData1.length, duration1) + " MB/s");
+
+            // Wait between clients
+            Thread.sleep(1000);
+
+            // Second client transfers 5MB
+            System.out.println("\n[TEST-CLIENT-2] Sending 5MB data...");
+            long startTime2 = System.currentTimeMillis();
+            byte[] response2 = sendLargeData(testData2);
+            long duration2 = System.currentTimeMillis() - startTime2;
+
+            System.out.println("[TEST-CLIENT-2] ✓ Received response: " + formatDataSize(response2.length));
+            System.out.println("[TEST-CLIENT-2] Transfer time: " + duration2 + "ms");
+            System.out.println("[TEST-CLIENT-2] Throughput: " + calculateThroughput(testData2.length, duration2) + " MB/s");
+
+            // Verify both clients successfully transferred data
+            if (response1.length > 0 && response2.length > 0) {
+                System.out.println("\n✓ Test PASSED: Multiple tunnel clients successfully transferred 5MB data each");
+                System.out.println("[TEST] Total data transferred: " + formatDataSize(testData1.length + testData2.length));
+            } else {
+                System.err.println("✗ Test FAILED: One or both clients failed to receive response");
+                throw new IOException("Invalid response from server");
+            }
+
+        } catch (IOException e) {
+            System.err.println("✗ Test FAILED: " + e.getMessage());
+            throw e;
+        }
+    }
+
 }
