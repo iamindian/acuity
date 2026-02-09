@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Handler for user client connections with streaming data support
@@ -17,6 +18,9 @@ public class UserClientHandler extends ServerHandler {
 
     // Streaming configuration
     private static final int CHUNK_SIZE = 8192; // 8KB chunks for streaming
+
+    // Mapper: userChannelId -> proxyChannelId for session affinity
+    private static final Map<String, String> userToProxyMapper = new ConcurrentHashMap<>();
 
     public UserClientHandler(Map<Integer, TunnelServerApp> userClientInstances) {
         super(null, userClientInstances, null);
@@ -35,6 +39,12 @@ public class UserClientHandler extends ServerHandler {
 
         // Clean up any streaming session for this user channel immediately
         ProxyClientHandler.cleanupSessionForUser(userChannelId);
+
+        // Remove user-to-proxy mapping
+        String mappedProxyId = userToProxyMapper.remove(userChannelId);
+        if (mappedProxyId != null) {
+            System.out.println("[TunnelServer] [Channel: " + userChannelId + "] Removed mapping to proxy: " + mappedProxyId);
+        }
 
         // Call parent cleanup (removes from userClientContexts)
         super.channelInactive(ctx);
@@ -59,21 +69,52 @@ public class UserClientHandler extends ServerHandler {
             return;
         }
 
-        // Select a random proxy channel
-        String selectedProxyChannelId = proxyChannelIds.get(random.nextInt(proxyChannelIds.size()));
-        ChannelHandlerContext proxyCtx = proxyClientContexts.get(selectedProxyChannelId);
+        // Try to reuse existing proxy mapping for session affinity
+        String selectedProxyChannelId = userToProxyMapper.get(userChannelId);
+        ChannelHandlerContext proxyCtx = null;
 
-        // Validate proxy channel is active before processing
-        if (proxyCtx == null || !proxyCtx.channel().isActive()) {
-            System.out.println("[TunnelServer] [Channel: " + userChannelId + "] Selected proxy channel " + selectedProxyChannelId + " is not active");
+        // Validate existing mapping
+        if (selectedProxyChannelId != null) {
+            proxyCtx = proxyClientContexts.get(selectedProxyChannelId);
+            if (proxyCtx != null && proxyCtx.channel().isActive()) {
+                System.out.println("[TunnelServer] [Channel: " + userChannelId + "] Reusing mapped proxy: " + selectedProxyChannelId);
+            } else {
+                // Mapped proxy is no longer valid, remove mapping
+                System.out.println("[TunnelServer] [Channel: " + userChannelId + "] Mapped proxy " + selectedProxyChannelId + " is no longer active");
+                userToProxyMapper.remove(userChannelId);
+                proxyClientContexts.remove(selectedProxyChannelId);
+                selectedProxyChannelId = null;
+                proxyCtx = null;
+            }
+        }
 
-            // Remove inactive proxy from map to prevent future selection
-            proxyClientContexts.remove(selectedProxyChannelId);
+        // If no valid mapping exists, select a new proxy randomly
+        if (selectedProxyChannelId == null) {
+            // Refresh proxy list in case some were removed
+            proxyChannelIds = new ArrayList<>(proxyClientContexts.keySet());
 
-            // Send error to user
-            ctx.writeAndFlush(Unpooled.copiedBuffer("Error: Proxy channel not available\n", CharsetUtil.UTF_8));
-            byteBuf.release();
-            return;
+            if (proxyChannelIds.isEmpty()) {
+                System.out.println("[TunnelServer] [Channel: " + userChannelId + "] No proxy channels available after cleanup");
+                ctx.writeAndFlush(Unpooled.copiedBuffer("Error: No proxy channels available\n", CharsetUtil.UTF_8));
+                byteBuf.release();
+                return;
+            }
+
+            selectedProxyChannelId = proxyChannelIds.get(random.nextInt(proxyChannelIds.size()));
+            proxyCtx = proxyClientContexts.get(selectedProxyChannelId);
+
+            // Validate newly selected proxy
+            if (proxyCtx == null || !proxyCtx.channel().isActive()) {
+                System.out.println("[TunnelServer] [Channel: " + userChannelId + "] Selected proxy channel " + selectedProxyChannelId + " is not active");
+                proxyClientContexts.remove(selectedProxyChannelId);
+                ctx.writeAndFlush(Unpooled.copiedBuffer("Error: Proxy channel not available\n", CharsetUtil.UTF_8));
+                byteBuf.release();
+                return;
+            }
+
+            // Store mapping for future requests
+            userToProxyMapper.put(userChannelId, selectedProxyChannelId);
+            System.out.println("[TunnelServer] [Channel: " + userChannelId + "] Created new mapping to proxy: " + selectedProxyChannelId);
         }
 
         // Stream the data in chunks if it's large
