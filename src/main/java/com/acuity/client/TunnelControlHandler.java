@@ -7,6 +7,8 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -29,6 +31,9 @@ public class TunnelControlHandler extends ChannelInboundHandlerAdapter {
 
     // Channel context for sending data to tunnel server
     private static volatile ChannelHandlerContext tunnelServerCtx;
+
+    // Streaming sessions: userChannelId -> StreamingSession for receiving data
+    private static final Map<String, StreamingSession> streamingSessions = new HashMap<>();
 
     public TunnelControlHandler(TunnelClientApp clientApp) {
         this.clientApp = clientApp;
@@ -60,27 +65,17 @@ public class TunnelControlHandler extends ChannelInboundHandlerAdapter {
                 return;
             }
 
-            if (action == TunnelAction.FORWARD) {
-                String userChannelId = tunnelMessage.getUserChannelId();
-                byte[] requestBytes = tunnelMessage.getData();
+            String userChannelId = tunnelMessage.getUserChannelId();
 
-                // Execute TCP request asynchronously using thread pool
-                executor.submit(() -> {
-                    try {
-                        byte[] responseBytes = TcpRequestExecutor.execute(requestBytes, clientApp.targetHost, clientApp.targetPort);
-
-                        // Stream response if it's large, otherwise send as single FORWARD
-                        if (responseBytes.length > CHUNK_SIZE) {
-                            streamDataToServer(userChannelId, responseBytes, ctx);
-                        } else {
-                            TunnelMessage responseMsg = new TunnelMessage(userChannelId, TunnelAction.FORWARD, responseBytes);
-                            ctx.writeAndFlush(Unpooled.copiedBuffer(responseMsg.toBytes()));
-                        }
-                    } catch (Exception e) {
-                        System.err.println("[TunnelClient] Error executing TCP request: " + e.getMessage());
-                        e.printStackTrace();
-                    }
-                });
+            // Handle streaming actions
+            if (action == TunnelAction.STREAM_START) {
+                handleStreamStart(userChannelId, tunnelMessage);
+            } else if (action == TunnelAction.STREAM_DATA) {
+                handleStreamData(userChannelId, tunnelMessage);
+            } else if (action == TunnelAction.STREAM_END) {
+                handleStreamEnd(userChannelId, tunnelMessage, ctx);
+            } else if (action == TunnelAction.FORWARD) {
+                handleForwardAction(userChannelId, tunnelMessage, ctx);
             } else if (action == TunnelAction.RESPONSE) {
                 System.out.println("[TunnelClient] Proxy " + clientApp.proxyPort + " has been opened.");
             } else if (action == TunnelAction.ERROR) {
@@ -90,6 +85,93 @@ public class TunnelControlHandler extends ChannelInboundHandlerAdapter {
         } finally {
             byteBuf.release();
         }
+    }
+
+    /**
+     * Handle STREAM_START message - initialize streaming session
+     */
+    private void handleStreamStart(String userChannelId, TunnelMessage tunnelMessage) {
+        byte[] data = tunnelMessage.getData();
+        long totalSize = Long.parseLong(new String(data, StandardCharsets.UTF_8));
+
+        System.out.println("[TunnelClient] Stream START: userChannel=" + userChannelId + ", totalSize=" + totalSize + " bytes");
+
+        // Create streaming session
+        StreamingSession session = new StreamingSession(userChannelId, totalSize);
+        streamingSessions.put(userChannelId, session);
+    }
+
+    /**
+     * Handle STREAM_DATA message - accumulate chunk
+     */
+    private void handleStreamData(String userChannelId, TunnelMessage tunnelMessage) {
+        byte[] chunk = tunnelMessage.getData();
+        StreamingSession session = streamingSessions.get(userChannelId);
+
+        if (session == null) {
+            System.err.println("[TunnelClient] Received STREAM_DATA for unknown stream: " + userChannelId);
+            return;
+        }
+
+        session.addChunk(chunk);
+        System.out.println("[TunnelClient] Stream DATA: userChannel=" + userChannelId +
+            ", chunkSize=" + chunk.length + " bytes, accumulated=" + session.getAccumulatedSize() + "/" + session.getTotalSize());
+    }
+
+    /**
+     * Handle STREAM_END message - complete stream and forward to target
+     */
+    private void handleStreamEnd(String userChannelId, TunnelMessage tunnelMessage, ChannelHandlerContext ctx) {
+        StreamingSession session = streamingSessions.remove(userChannelId);
+
+        if (session == null) {
+            System.err.println("[TunnelClient] Received STREAM_END for unknown stream: " + userChannelId);
+            return;
+        }
+
+        byte[] completeData = session.getCompleteData();
+        System.out.println("[TunnelClient] Stream END: userChannel=" + userChannelId + ", totalData=" + completeData.length + " bytes");
+
+        // Execute TCP request asynchronously with accumulated data
+        executor.submit(() -> {
+            try {
+                byte[] responseBytes = TcpRequestExecutor.execute(completeData, clientApp.targetHost, clientApp.targetPort);
+
+                // Stream response if it's large, otherwise send as single FORWARD
+                if (responseBytes.length > CHUNK_SIZE) {
+                    streamDataToServer(userChannelId, responseBytes, ctx);
+                } else {
+                    TunnelMessage responseMsg = new TunnelMessage(userChannelId, TunnelAction.FORWARD, responseBytes);
+                    ctx.writeAndFlush(Unpooled.copiedBuffer(responseMsg.toBytes()));
+                }
+            } catch (Exception e) {
+                System.err.println("[TunnelClient] Error executing TCP request: " + e.getMessage());
+            }
+        });
+    }
+
+    /**
+     * Handle FORWARD action - small data sent directly
+     */
+    private void handleForwardAction(String userChannelId, TunnelMessage tunnelMessage, ChannelHandlerContext ctx) {
+        byte[] requestBytes = tunnelMessage.getData();
+
+        // Execute TCP request asynchronously using thread pool
+        executor.submit(() -> {
+            try {
+                byte[] responseBytes = TcpRequestExecutor.execute(requestBytes, clientApp.targetHost, clientApp.targetPort);
+
+                // Stream response if it's large, otherwise send as single FORWARD
+                if (responseBytes.length > CHUNK_SIZE) {
+                    streamDataToServer(userChannelId, responseBytes, ctx);
+                } else {
+                    TunnelMessage responseMsg = new TunnelMessage(userChannelId, TunnelAction.FORWARD, responseBytes);
+                    ctx.writeAndFlush(Unpooled.copiedBuffer(responseMsg.toBytes()));
+                }
+            } catch (Exception e) {
+                System.err.println("[TunnelClient] Error executing TCP request: " + e.getMessage());
+            }
+        });
     }
 
     /**
@@ -165,6 +247,40 @@ public class TunnelControlHandler extends ChannelInboundHandlerAdapter {
         } catch (InterruptedException e) {
             executor.shutdownNow();
             Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
+     * Helper class to accumulate streaming data chunks
+     */
+    private static class StreamingSession {
+        private final String userChannelId;
+        private final long totalSize;
+        private byte[] buffer;
+        private int accumulatedSize;
+
+        public StreamingSession(String userChannelId, long totalSize) {
+            this.userChannelId = userChannelId;
+            this.totalSize = totalSize;
+            this.buffer = new byte[(int) totalSize];
+            this.accumulatedSize = 0;
+        }
+
+        public void addChunk(byte[] chunk) {
+            System.arraycopy(chunk, 0, buffer, accumulatedSize, chunk.length);
+            accumulatedSize += chunk.length;
+        }
+
+        public byte[] getCompleteData() {
+            return buffer;
+        }
+
+        public int getAccumulatedSize() {
+            return accumulatedSize;
+        }
+
+        public long getTotalSize() {
+            return totalSize;
         }
     }
 }
