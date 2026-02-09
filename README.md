@@ -84,13 +84,14 @@ SERVER_CONFIG=server-config.toml CLIENT_CONFIG=client-config.toml ./start.sh bot
 
 **Server (TOML Mode)**: `java -cp target\tunnel-1.0-SNAPSHOT.jar com.acuity.server.TunnelServerApp <config-file.toml>`
 
-**Client (Command Line Mode)**: `java -cp target\tunnel-1.0-SNAPSHOT.jar com.acuity.client.TunnelClientApp [tunnelHost] [tunnelPort] [proxyPort] [targetHost] [targetPort] [sharedKey]`
+**Client (Command Line Mode)**: `java -cp target\tunnel-1.0-SNAPSHOT.jar com.acuity.client.TunnelClientApp [tunnelHost] [tunnelPort] [proxyPort] [targetHost] [targetPort] [sharedKey] [groupId]`
 - `tunnelHost` (optional): Tunnel server host (default: 127.0.0.1)
 - `tunnelPort` (optional): Tunnel server port (default: 7000)
 - `proxyPort` (optional): Port to request from server (default: 8080)
 - `targetHost` (optional): Target host for proxying (default: 127.0.0.1)
 - `targetPort` (optional): Target port for proxying (default: 80)
 - `sharedKey` (optional): Base64-encoded AES-256 key (must match server's key)
+- `groupId` (optional): Group identifier for multiple clients sharing the same proxy port (default: "default")
 
 **Client (TOML Mode)**: `java -cp target\tunnel-1.0-SNAPSHOT.jar com.acuity.client.TunnelClientApp <config-file.toml>`
 

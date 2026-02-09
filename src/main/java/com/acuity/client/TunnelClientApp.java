@@ -22,18 +22,24 @@ public class TunnelClientApp {
     final String targetHost;
     final int targetPort;
     final String sharedKey;
+    final String groupId;
 
     public TunnelClientApp(String tunnelHost, int tunnelPort, int proxyPort, String targetHost, int targetPort) {
-        this(tunnelHost, tunnelPort, proxyPort, targetHost, targetPort, null);
+        this(tunnelHost, tunnelPort, proxyPort, targetHost, targetPort, null, "default");
     }
 
     public TunnelClientApp(String tunnelHost, int tunnelPort, int proxyPort, String targetHost, int targetPort, String sharedKey) {
+        this(tunnelHost, tunnelPort, proxyPort, targetHost, targetPort, sharedKey, "default");
+    }
+
+    public TunnelClientApp(String tunnelHost, int tunnelPort, int proxyPort, String targetHost, int targetPort, String sharedKey, String groupId) {
         this.tunnelHost = tunnelHost;
         this.tunnelPort = tunnelPort;
         this.proxyPort = proxyPort;
         this.targetHost = targetHost;
         this.targetPort = targetPort;
         this.sharedKey = sharedKey;
+        this.groupId = groupId != null && !groupId.isEmpty() ? groupId : "default";
     }
 
     public void start() throws InterruptedException {
@@ -118,18 +124,21 @@ public class TunnelClientApp {
             if (args.length > 5) {
                 config.setSharedKey(args[5]);
             }
+            if (args.length > 6) {
+                config.setGroupId(args[6]);
+            }
         }
 
         if (config.getSharedKey() == null || config.getSharedKey().isEmpty()) {
             System.err.println("[TunnelClient] Error: Shared encryption key is required!");
             System.err.println("[TunnelClient] Usage: java TunnelClientApp <config-file.toml>");
-            System.err.println("[TunnelClient] Or (legacy): java TunnelClientApp <tunnelHost> <tunnelPort> <proxyPort> <targetHost> <targetPort> <sharedKey>");
+            System.err.println("[TunnelClient] Or (legacy): java TunnelClientApp <tunnelHost> <tunnelPort> <proxyPort> <targetHost> <targetPort> <sharedKey> [groupId]");
             System.err.println("[TunnelClient] Get the shared key from the tunnel server output when it starts.");
             System.exit(1);
         }
 
         System.out.println("[TunnelClient] " + config);
         new TunnelClientApp(config.getTunnelHost(), config.getTunnelPort(), config.getProxyPort(),
-                           config.getTargetHost(), config.getTargetPort(), config.getSharedKey()).start();
+                           config.getTargetHost(), config.getTargetPort(), config.getSharedKey(), config.getGroupId()).start();
     }
 }

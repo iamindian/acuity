@@ -16,6 +16,7 @@ public class ClientConfig {
     private String targetHost;
     private int targetPort;
     private String sharedKey;
+    private String groupId;
     private int corePoolSize;
     private int maxPoolSize;
     private long keepAliveTimeSeconds;
@@ -32,6 +33,7 @@ public class ClientConfig {
         this.targetHost = "127.0.0.1";
         this.targetPort = 80;
         this.sharedKey = null;
+        this.groupId = "default";
         this.corePoolSize = 10;
         this.maxPoolSize = 50;
         this.keepAliveTimeSeconds = 60;
@@ -69,6 +71,9 @@ public class ClientConfig {
             }
             if (clientConfig.contains("sharedKey")) {
                 config.sharedKey = clientConfig.getString("sharedKey");
+            }
+            if (clientConfig.contains("groupId")) {
+                config.groupId = clientConfig.getString("groupId");
             }
         }
 
@@ -153,6 +158,14 @@ public class ClientConfig {
         this.sharedKey = sharedKey;
     }
 
+    public String getGroupId() {
+        return groupId;
+    }
+
+    public void setGroupId(String groupId) {
+        this.groupId = groupId;
+    }
+
     public int getCorePoolSize() {
         return corePoolSize;
     }
@@ -190,6 +203,7 @@ public class ClientConfig {
                 ", targetHost='" + targetHost + '\'' +
                 ", targetPort=" + targetPort +
                 ", sharedKey=" + (sharedKey != null ? "***" : "null") +
+                ", groupId='" + groupId + '\'' +
                 ", corePoolSize=" + corePoolSize +
                 ", maxPoolSize=" + maxPoolSize +
                 ", keepAliveTimeSeconds=" + keepAliveTimeSeconds +

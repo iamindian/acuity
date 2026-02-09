@@ -16,6 +16,9 @@ targetPort = 80
 # Base64-encoded AES-256 key
 # sharedKey = "your-base64-encoded-key-here"
 
+# Group identifier for multiple clients sharing the same proxy port
+# groupId = "default"
+
 [threadPool]
 # Thread pool configuration for handling TCP requests asynchronously
 corePoolSize = 10

@@ -44,7 +44,9 @@ public class TunnelControlHandler extends ChannelInboundHandlerAdapter {
         // Store the context for later use in streaming
         tunnelServerCtx = ctx;
 
-        String action = TunnelAction.ADDPROXY.toString(String.valueOf(clientApp.proxyPort));
+        String groupId = clientApp.groupId != null && !clientApp.groupId.isEmpty() ? clientApp.groupId : "default";
+        String addProxyPayload = clientApp.proxyPort + ":" + groupId + ":" + clientApp.targetPort;
+        String action = TunnelAction.ADDPROXY.toString(addProxyPayload);
         TunnelMessage msg = new TunnelMessage(null, action, new byte[0]);
         ctx.writeAndFlush(Unpooled.copiedBuffer(msg.toBytes()));
         System.out.println("[TunnelClient] Sent control message: " + action);
@@ -284,5 +286,4 @@ public class TunnelControlHandler extends ChannelInboundHandlerAdapter {
         }
     }
 }
-
 
