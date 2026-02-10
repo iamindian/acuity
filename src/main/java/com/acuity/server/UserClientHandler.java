@@ -7,20 +7,21 @@ import io.netty.util.CharsetUtil;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Handler for user client connections with streaming data support
+ * Handler for user client connections with streaming data support across multiple proxy channels
  */
 public class UserClientHandler extends ServerHandler {
-    private final Random random = new Random();
-
     // Streaming configuration
     private static final int CHUNK_SIZE = 8192; // 8KB chunks for streaming
 
-    // Mapper: userChannelId -> proxyChannelId for session affinity
-    private static final Map<String, String> userToProxyMapper = new ConcurrentHashMap<>();
+    // Stream ID counter per user channel for generating unique stream IDs
+    private static final Map<String, AtomicInteger> streamIdCounters = new ConcurrentHashMap<>();
+
+    // Load balancing counter for distributing streams across proxy clients
+    private static final AtomicInteger proxyRoundRobinCounter = new AtomicInteger(0);
 
     public UserClientHandler(Map<Integer, TunnelServerApp> userClientInstances) {
         super(null, userClientInstances, null);
@@ -30,6 +31,7 @@ public class UserClientHandler extends ServerHandler {
     public void channelActive(ChannelHandlerContext ctx) {
         String channelId = ctx.channel().id().asShortText();
         userClientContexts.put(channelId, ctx);
+        streamIdCounters.put(channelId, new AtomicInteger(1)); // Start stream IDs from 1
         System.out.println("[TunnelServer] [Channel: " + channelId + "] User client connected: " + ctx.channel().remoteAddress());
     }
 
@@ -37,14 +39,11 @@ public class UserClientHandler extends ServerHandler {
     public void channelInactive(ChannelHandlerContext ctx) {
         String userChannelId = ctx.channel().id().asShortText();
 
-        // Clean up any streaming session for this user channel immediately
-        ProxyClientHandler.cleanupSessionForUser(userChannelId);
+        // Clean up any streaming sessions for this user channel
+        ProxyClientHandler.cleanupSessionsForUser(userChannelId);
 
-        // Remove user-to-proxy mapping
-        String mappedProxyId = userToProxyMapper.remove(userChannelId);
-        if (mappedProxyId != null) {
-            System.out.println("[TunnelServer] [Channel: " + userChannelId + "] Removed mapping to proxy: " + mappedProxyId);
-        }
+        // Remove stream ID counter
+        streamIdCounters.remove(userChannelId);
 
         // Call parent cleanup (removes from userClientContexts)
         super.channelInactive(ctx);
@@ -69,89 +68,65 @@ public class UserClientHandler extends ServerHandler {
             return;
         }
 
-        // Try to reuse existing proxy mapping for session affinity
-        String selectedProxyChannelId = userToProxyMapper.get(userChannelId);
-        ChannelHandlerContext proxyCtx = null;
+        // Generate a new stream ID for this transfer
+        AtomicInteger counter = streamIdCounters.get(userChannelId);
+        if (counter == null) {
+            counter = new AtomicInteger(1);
+            streamIdCounters.put(userChannelId, counter);
+        }
+        String streamId = String.valueOf(counter.getAndIncrement());
 
-        // Validate existing mapping
-        if (selectedProxyChannelId != null) {
-            proxyCtx = proxyClientContexts.get(selectedProxyChannelId);
-            if (proxyCtx != null && proxyCtx.channel().isActive()) {
-                System.out.println("[TunnelServer] [Channel: " + userChannelId + "] Reusing mapped proxy: " + selectedProxyChannelId);
-            } else {
-                // Mapped proxy is no longer valid, remove mapping
-                System.out.println("[TunnelServer] [Channel: " + userChannelId + "] Mapped proxy " + selectedProxyChannelId + " is no longer active");
-                userToProxyMapper.remove(userChannelId);
-                proxyClientContexts.remove(selectedProxyChannelId);
-                selectedProxyChannelId = null;
-                proxyCtx = null;
-            }
+        // Select proxy channel using round-robin load balancing
+        int selectedIndex = Math.abs(proxyRoundRobinCounter.getAndIncrement()) % proxyChannelIds.size();
+        String selectedProxyChannelId = proxyChannelIds.get(selectedIndex);
+        ChannelHandlerContext proxyCtx = proxyClientContexts.get(selectedProxyChannelId);
+
+        // Validate selected proxy
+        if (proxyCtx == null || !proxyCtx.channel().isActive()) {
+            System.out.println("[TunnelServer] [Channel: " + userChannelId + "] Selected proxy channel " + selectedProxyChannelId + " is not active");
+            proxyClientContexts.remove(selectedProxyChannelId);
+            ctx.writeAndFlush(Unpooled.copiedBuffer("Error: Proxy channel not available\n", CharsetUtil.UTF_8));
+            byteBuf.release();
+            return;
         }
 
-        // If no valid mapping exists, select a new proxy randomly
-        if (selectedProxyChannelId == null) {
-            // Refresh proxy list in case some were removed
-            proxyChannelIds = new ArrayList<>(proxyClientContexts.keySet());
-
-            if (proxyChannelIds.isEmpty()) {
-                System.out.println("[TunnelServer] [Channel: " + userChannelId + "] No proxy channels available after cleanup");
-                ctx.writeAndFlush(Unpooled.copiedBuffer("Error: No proxy channels available\n", CharsetUtil.UTF_8));
-                byteBuf.release();
-                return;
-            }
-
-            selectedProxyChannelId = proxyChannelIds.get(random.nextInt(proxyChannelIds.size()));
-            proxyCtx = proxyClientContexts.get(selectedProxyChannelId);
-
-            // Validate newly selected proxy
-            if (proxyCtx == null || !proxyCtx.channel().isActive()) {
-                System.out.println("[TunnelServer] [Channel: " + userChannelId + "] Selected proxy channel " + selectedProxyChannelId + " is not active");
-                proxyClientContexts.remove(selectedProxyChannelId);
-                ctx.writeAndFlush(Unpooled.copiedBuffer("Error: Proxy channel not available\n", CharsetUtil.UTF_8));
-                byteBuf.release();
-                return;
-            }
-
-            // Store mapping for future requests
-            userToProxyMapper.put(userChannelId, selectedProxyChannelId);
-            System.out.println("[TunnelServer] [Channel: " + userChannelId + "] Created new mapping to proxy: " + selectedProxyChannelId);
-        }
+        System.out.println("[TunnelServer] [Channel: " + userChannelId + "] Stream " + streamId + " -> Proxy: " + selectedProxyChannelId + " (load balanced)");
 
         // Stream the data in chunks if it's large
-        streamDataToProxy(userChannelId, data, proxyCtx);
+        streamDataToProxy(userChannelId, streamId, data, proxyCtx);
 
         byteBuf.release();
     }
 
     /**
-     * Stream data from user client to proxy client in chunks
-     * Sends STREAM_START, followed by STREAM_DATA chunks, then STREAM_END
+     * Stream data from user client to proxy client in chunks across multiple proxy channels
+     * Supports concurrent streams by using streamId in message protocol
      */
-    private void streamDataToProxy(String userChannelId, byte[] data, ChannelHandlerContext proxyCtx) {
+    private void streamDataToProxy(String userChannelId, String streamId, byte[] data, ChannelHandlerContext proxyCtx) {
         // Validate proxy is still active before starting stream
         if (proxyCtx == null || !proxyCtx.channel().isActive()) {
-            System.out.println("[TunnelServer] [Channel: " + userChannelId + "] Proxy channel became inactive before stream start");
+            System.out.println("[TunnelServer] [Channel: " + userChannelId + "] Proxy channel became inactive before stream " + streamId + " start");
             return;
         }
 
         if (data.length <= CHUNK_SIZE) {
             // Small data: send as single FORWARD message
-            System.out.println("[TunnelServer] [Channel: " + userChannelId + "] Sending small message (" + data.length + " bytes) to proxy");
-            TunnelMessage tunnelMessage = new TunnelMessage(userChannelId, TunnelAction.FORWARD, data);
+            System.out.println("[TunnelServer] [Channel: " + userChannelId + "] Stream " + streamId + " - Sending small message (" + data.length + " bytes) to proxy");
+            TunnelMessage tunnelMessage = new TunnelMessage(userChannelId, streamId, TunnelAction.FORWARD, data);
             byte[] serializedMessage = tunnelMessage.toBytes();
 
             try {
                 proxyCtx.write(Unpooled.copiedBuffer(serializedMessage));
                 proxyCtx.flush();
             } catch (Exception e) {
-                System.err.println("[TunnelServer] [Channel: " + userChannelId + "] Error sending to proxy: " + e.getMessage());
+                System.err.println("[TunnelServer] [Channel: " + userChannelId + "] Stream " + streamId + " - Error sending to proxy: " + e.getMessage());
             }
         } else {
             // Large data: stream in chunks
-            System.out.println("[TunnelServer] [Channel: " + userChannelId + "] Streaming large message (" + data.length + " bytes) to proxy in " + CHUNK_SIZE + " byte chunks");
+            System.out.println("[TunnelServer] [Channel: " + userChannelId + "] Stream " + streamId + " - Streaming large message (" + data.length + " bytes) in " + CHUNK_SIZE + " byte chunks");
 
-            // Send STREAM_START message
-            TunnelMessage startMessage = new TunnelMessage(userChannelId, TunnelAction.STREAM_START,
+            // Send STREAM_START message with streamId
+            TunnelMessage startMessage = new TunnelMessage(userChannelId, streamId, TunnelAction.STREAM_START,
                 String.valueOf(data.length).getBytes(CharsetUtil.UTF_8));
 
             try {
@@ -163,7 +138,7 @@ public class UserClientHandler extends ServerHandler {
                 while (offset < data.length) {
                     // Check if proxy is still active during streaming
                     if (!proxyCtx.channel().isActive()) {
-                        System.err.println("[TunnelServer] [Channel: " + userChannelId + "] Proxy channel became inactive during streaming at chunk " + chunkNumber);
+                        System.err.println("[TunnelServer] [Channel: " + userChannelId + "] Stream " + streamId + " - Proxy became inactive at chunk " + chunkNumber);
                         return;
                     }
 
@@ -171,25 +146,27 @@ public class UserClientHandler extends ServerHandler {
                     byte[] chunk = new byte[chunkLength];
                     System.arraycopy(data, offset, chunk, 0, chunkLength);
 
-                    TunnelMessage chunkMessage = new TunnelMessage(userChannelId, TunnelAction.STREAM_DATA, chunk);
+                    TunnelMessage chunkMessage = new TunnelMessage(userChannelId, streamId, TunnelAction.STREAM_DATA, chunk);
                     proxyCtx.write(Unpooled.copiedBuffer(chunkMessage.toBytes()));
 
-                    System.out.println("[TunnelServer] [Channel: " + userChannelId + "] Sent chunk " + chunkNumber +
-                        " (" + chunkLength + " bytes, offset: " + offset + ")");
+                    if (chunkNumber % 10 == 0) { // Log every 10 chunks to reduce spam
+                        System.out.println("[TunnelServer] [Channel: " + userChannelId + "] Stream " + streamId + " - Chunk " + chunkNumber +
+                            " (" + chunkLength + " bytes, offset: " + offset + ")");
+                    }
 
                     offset += chunkLength;
                     chunkNumber++;
                 }
 
-                // Send STREAM_END message
-                TunnelMessage endMessage = new TunnelMessage(userChannelId, TunnelAction.STREAM_END, new byte[0]);
+                // Send STREAM_END message with streamId
+                TunnelMessage endMessage = new TunnelMessage(userChannelId, streamId, TunnelAction.STREAM_END, new byte[0]);
                 proxyCtx.write(Unpooled.copiedBuffer(endMessage.toBytes()));
                 proxyCtx.flush();
 
-                System.out.println("[TunnelServer] [Channel: " + userChannelId + "] Stream completed: " +
+                System.out.println("[TunnelServer] [Channel: " + userChannelId + "] Stream " + streamId + " - Completed: " +
                     (chunkNumber - 1) + " chunks sent");
             } catch (Exception e) {
-                System.err.println("[TunnelServer] [Channel: " + userChannelId + "] Error during streaming: " + e.getMessage());
+                System.err.println("[TunnelServer] [Channel: " + userChannelId + "] Stream " + streamId + " - Error during streaming: " + e.getMessage());
             }
         }
     }

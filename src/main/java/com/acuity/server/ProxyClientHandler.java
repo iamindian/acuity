@@ -4,17 +4,20 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Handler for proxy client connections with streaming support
+ * Handler for proxy client connections with streaming support across multiple channels
  */
 public class ProxyClientHandler extends ServerHandler {
+    // Streaming configuration
+    private static final int CHUNK_SIZE = 8192; // 8KB chunks
 
-    // Track streaming sessions: userChannelId -> ByteBuffer for reassembling chunks
-    private static final Map<String, StreamingSession> streamingSessions = new HashMap<>();
+    // Track streaming sessions: userChannelId:streamId -> StreamingSession for stream multiplexing
+    private static final Map<String, StreamingSession> streamingSessions = new ConcurrentHashMap<>();
 
     public ProxyClientHandler(Map<Integer, List<TunnelServerApp>> proxyClientInstances) {
         super(proxyClientInstances, null, null);
@@ -30,117 +33,122 @@ public class ProxyClientHandler extends ServerHandler {
     @Override
     public void channelInactive(ChannelHandlerContext ctx) {
         String proxyChannelId = ctx.channel().id().asShortText();
-
-        // Call parent cleanup
         super.channelInactive(ctx);
-
         System.out.println("[TunnelServer] [Channel: " + proxyChannelId + "] Proxy client disconnected");
     }
 
     /**
-     * Clean up streaming session for a specific user channel when it becomes inactive
-     * Called from UserClientHandler.channelInactive()
-     * @param userChannelId The user channel ID that became inactive
+     * Clean up all streaming sessions for a specific user channel when it becomes inactive
+     */
+    public static void cleanupSessionsForUser(String userChannelId) {
+        List<String> sessionsToRemove = new ArrayList<>();
+        for (String key : streamingSessions.keySet()) {
+            if (key.startsWith(userChannelId + ":")) {
+                sessionsToRemove.add(key);
+            }
+        }
+        for (String key : sessionsToRemove) {
+            streamingSessions.remove(key);
+            System.out.println("[TunnelServer] Cleaned up streaming session: " + key);
+        }
+    }
+
+    /**
+     * Backward compatibility wrapper
      */
     public static void cleanupSessionForUser(String userChannelId) {
-        StreamingSession removed = streamingSessions.remove(userChannelId);
-        if (removed != null) {
-            System.out.println("[TunnelServer] Cleaned up streaming session for disconnected user channel: " + userChannelId);
-        }
+        cleanupSessionsForUser(userChannelId);
     }
 
     @Override
     protected void handleTunnelMessage(ChannelHandlerContext ctx, TunnelMessage tunnelMessage, String proxyChannelId) {
         TunnelAction action = tunnelMessage.getAction();
         String userChannelId = tunnelMessage.getUserChannelId();
+        String streamId = tunnelMessage.getStreamId();
+        String streamKey = tunnelMessage.getStreamKey();
 
         // Handle streaming-specific actions
         if (action == TunnelAction.STREAM_START) {
-            handleStreamStart(ctx, tunnelMessage, proxyChannelId, userChannelId);
+            handleStreamStart(ctx, tunnelMessage, proxyChannelId, userChannelId, streamId, streamKey);
         } else if (action == TunnelAction.STREAM_DATA) {
-            handleStreamData(ctx, tunnelMessage, proxyChannelId, userChannelId);
+            handleStreamData(ctx, tunnelMessage, proxyChannelId, userChannelId, streamId, streamKey);
         } else if (action == TunnelAction.STREAM_END) {
-            handleStreamEnd(ctx, tunnelMessage, proxyChannelId, userChannelId);
+            handleStreamEnd(ctx, tunnelMessage, proxyChannelId, userChannelId, streamId, streamKey);
         } else if (action == TunnelAction.FORWARD) {
             handleForwardAction(ctx, tunnelMessage, proxyChannelId);
         } else {
-            // Delegate to parent for other actions
             super.handleTunnelMessage(ctx, tunnelMessage, proxyChannelId);
         }
     }
 
     /**
-     * Handle STREAM_START message - initialize streaming session
+     * Handle STREAM_START message - initialize streaming session with streamId
      */
-    private void handleStreamStart(ChannelHandlerContext ctx, TunnelMessage tunnelMessage, String proxyChannelId, String userChannelId) {
+    private void handleStreamStart(ChannelHandlerContext ctx, TunnelMessage tunnelMessage, String proxyChannelId,
+                                   String userChannelId, String streamId, String streamKey) {
         byte[] data = tunnelMessage.getData();
         long totalSize = Long.parseLong(new String(data, StandardCharsets.UTF_8));
 
-        System.out.println("[TunnelServer] [Channel: " + proxyChannelId + "] Stream START: userChannel=" + userChannelId + ", totalSize=" + totalSize + " bytes");
+        System.out.println("[TunnelServer] [Channel: " + proxyChannelId + "] Stream START: streamKey=" + streamKey + ", totalSize=" + totalSize + " bytes");
 
-        // Check if user channel is still active
         ChannelHandlerContext userCtx = userClientContexts.get(userChannelId);
         if (userCtx == null || !userCtx.channel().isActive()) {
-            System.err.println("[TunnelServer] [Channel: " + proxyChannelId + "] ERROR: User channel " + userChannelId + " is not active, cannot start stream");
+            System.err.println("[TunnelServer] [Channel: " + proxyChannelId + "] ERROR: User channel " + userChannelId + " is not active");
             return;
         }
 
-        // Clean up any existing session for this user channel (prevents orphans)
-        StreamingSession existingSession = streamingSessions.get(userChannelId);
-        if (existingSession != null) {
-            System.out.println("[TunnelServer] [Channel: " + proxyChannelId + "] WARNING: Replacing existing streaming session for userChannel=" + userChannelId);
-        }
-
-        // Create streaming session
-        StreamingSession session = new StreamingSession(userChannelId, totalSize);
-        streamingSessions.put(userChannelId, session);
+        StreamingSession session = new StreamingSession(streamKey, totalSize);
+        streamingSessions.put(streamKey, session);
     }
 
     /**
-     * Handle STREAM_DATA message - accumulate chunk
+     * Handle STREAM_DATA message - accumulate chunk for specific stream
      */
-    private void handleStreamData(ChannelHandlerContext ctx, TunnelMessage tunnelMessage, String proxyChannelId, String userChannelId) {
+    private void handleStreamData(ChannelHandlerContext ctx, TunnelMessage tunnelMessage, String proxyChannelId,
+                                  String userChannelId, String streamId, String streamKey) {
         byte[] chunk = tunnelMessage.getData();
+        StreamingSession session = streamingSessions.get(streamKey);
 
-        StreamingSession session = streamingSessions.get(userChannelId);
         if (session == null) {
-            System.err.println("[TunnelServer] [Channel: " + proxyChannelId + "] ERROR: Received STREAM_DATA without STREAM_START for " + userChannelId);
+            System.err.println("[TunnelServer] [Channel: " + proxyChannelId + "] ERROR: No session for stream " + streamKey);
             return;
         }
 
         session.addChunk(chunk);
-        System.out.println("[TunnelServer] [Channel: " + proxyChannelId + "] Stream DATA: userChannel=" + userChannelId + ", chunkSize=" + chunk.length + " bytes, accumulated=" + session.getAccumulatedSize() + "/" + session.getTotalSize());
+        if (session.getAccumulatedSize() % (CHUNK_SIZE * 10) == 0) {
+            System.out.println("[TunnelServer] [Channel: " + proxyChannelId + "] Stream " + streamId + " DATA: accumulated=" +
+                session.getAccumulatedSize() + "/" + session.getTotalSize());
+        }
     }
 
     /**
-     * Handle STREAM_END message - forward complete data to user channel
+     * Handle STREAM_END message - complete stream and forward to user channel
      */
-    private void handleStreamEnd(ChannelHandlerContext ctx, TunnelMessage tunnelMessage, String proxyChannelId, String userChannelId) {
-        StreamingSession session = streamingSessions.get(userChannelId);
+    private void handleStreamEnd(ChannelHandlerContext ctx, TunnelMessage tunnelMessage, String proxyChannelId,
+                                 String userChannelId, String streamId, String streamKey) {
+        StreamingSession session = streamingSessions.remove(streamKey);
+
         if (session == null) {
-            System.err.println("[TunnelServer] [Channel: " + proxyChannelId + "] ERROR: Received STREAM_END without STREAM_START for " + userChannelId);
+            System.err.println("[TunnelServer] [Channel: " + proxyChannelId + "] ERROR: No session for stream " + streamKey);
             return;
         }
 
         byte[] completeData = session.getCompleteData();
-        streamingSessions.remove(userChannelId);
+        System.out.println("[TunnelServer] [Channel: " + proxyChannelId + "] Stream " + streamId + " END: totalData=" +
+            completeData.length + " bytes");
 
-        System.out.println("[TunnelServer] [Channel: " + proxyChannelId + "] Stream END: userChannel=" + userChannelId + ", totalData=" + completeData.length + " bytes");
-
-        // Forward to user channel
         forwardDataToUserClient(ctx, userChannelId, completeData, proxyChannelId);
     }
 
-    @Override
+    /**
+     * Handle FORWARD action
+     */
     protected void handleForwardAction(ChannelHandlerContext ctx, TunnelMessage tunnelMessage, String proxyChannelId) {
-        // Proxy receives FORWARD message and should forward data to the actual target
         String userChannelId = tunnelMessage.getUserChannelId();
         byte[] data = tunnelMessage.getData();
 
-        System.out.println("[TunnelServer] [Channel: " + proxyChannelId + "] Proxy forwarding data from user channel: " + userChannelId + ", data length: " + (data != null ? data.length : 0));
-
         if (userChannelId == null) {
-            System.out.println("[TunnelServer] [Channel: " + proxyChannelId + "] Missing userChannelId; drop data");
+            System.out.println("[TunnelServer] [Channel: " + proxyChannelId + "] Missing userChannelId; dropping data");
             return;
         }
 
@@ -158,7 +166,6 @@ public class ProxyClientHandler extends ServerHandler {
         }
 
         if (data == null || data.length == 0) {
-            System.out.println("[TunnelServer] [Channel: " + proxyChannelId + "] No data to forward to user channel: " + userChannelId);
             return;
         }
 
@@ -166,15 +173,15 @@ public class ProxyClientHandler extends ServerHandler {
     }
 
     /**
-     * Inner class to track streaming session state
+     * Inner class to track streaming session state with streamId support
      */
     private static class StreamingSession {
-        private final String userChannelId;
+        private final String streamKey;
         private final long totalSize;
         private final ByteArrayBuilder buffer;
 
-        public StreamingSession(String userChannelId, long totalSize) {
-            this.userChannelId = userChannelId;
+        public StreamingSession(String streamKey, long totalSize) {
+            this.streamKey = streamKey;
             this.totalSize = totalSize;
             this.buffer = new ByteArrayBuilder((int) Math.min(totalSize, Integer.MAX_VALUE));
         }
@@ -210,7 +217,6 @@ public class ProxyClientHandler extends ServerHandler {
 
         public void append(byte[] data) {
             if (size + data.length > buffer.length) {
-                // Expand buffer
                 byte[] newBuffer = new byte[Math.max(buffer.length * 2, size + data.length)];
                 System.arraycopy(buffer, 0, newBuffer, 0, size);
                 buffer = newBuffer;
